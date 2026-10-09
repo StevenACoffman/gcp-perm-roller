@@ -1,0 +1,16 @@
+{"api": {
+  "bigquery": {"restUrl": "https://cloud.google.com/bigquery/docs/reference/rest", "methods": {
+    "bigquery.tables.patch": {"permissions": [
+      {"name": "bigquery.tables.get", "discoveryMethodologies": ["restcrawliamblockv1"]},
+      {"name": "bigquery.tables.update", "discoveryMethodologies": ["manual", "restcrawliamblockv1"]},
+      {"name": "bigquery.tables.updateTag", "discoveryMethodologies": ["manual"]}
+    ]},
+    "bigquery.jobs.insert": {"permissions": [
+      {"name": "bigquery.jobs.create", "discoveryMethodologies": ["manual"]},
+      {"name": "iam.serviceAccounts.actAs", "discoveryMethodologies": ["manual"], "condition": {"bodyPathExists": "$.x"}}
+    ]},
+    "bigquery.tables.list": {}
+  }},
+  "pubsub": {"sourceUrl": "https://cloud.google.com/pubsub/docs/access-control", "sourceUrlAuthoritive": true, "methods": {}},
+  "dataflow": {"sourceUrl": "https://cloud.google.com/dataflow/docs/concepts/access-control", "methods": {}}
+}}

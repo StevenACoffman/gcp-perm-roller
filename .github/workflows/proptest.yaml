@@ -1,0 +1,35 @@
+name: Property tests
+on:
+  workflow_dispatch:
+  push:
+    branches:
+    - main
+  pull_request:
+    types: [opened, synchronize]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  GOTOOLCHAIN: local
+  GOFLAGS: "-trimpath"
+jobs:
+  proptest:
+    # The rapid properties in internal/ run 100 times each in the unit suite. This job
+    # runs them ten times as often: TestExactCoverIsOptimal, for one, needed thousands of
+    # attempts to find a counterexample to a mutant that a fixed test now pins.
+    name: Properties
+    runs-on: ubuntu-latest
+    # Under a minute of work; the ceiling is against a property that stops terminating.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: "false"
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: "1.27"
+    - name: Check the properties
+      # -short skips the end-to-end analyzer test, which has no properties and loads the SDK.
+      run: go test -short ./internal/... -rapid.checks=1000

@@ -1,0 +1,1 @@
+{"name": "roles/pubsub.publisher", "title": "Pub/Sub Publisher", "stage": "GA", "includedPermissions": ["pubsub.topics.publish"]}

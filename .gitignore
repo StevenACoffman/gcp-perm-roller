@@ -1,0 +1,106 @@
+# https://github.com/github/gitignore/blob/main/Go.gitignore
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+
+
+# Binaries and build artifacts
+bin/
+dist/
+# Binaries produced by `go build` in the repo root, named after their cmd/ package
+/server
+/migrate
+coverage.out
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+# Local TLS Certificates
+.certs/
+
+## Build output
+bin
+
+## NODE gitignore
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+# Dependencies
+vendor/
+node_modules/
+.pnpm-store/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Astro
+.astro/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# tooling debris we do not want to check in
+gha-creds-*.json
+gha-kubeconfig-*
+*,out
+
+# Rumdl - markdown linter cache
+.rumdl_cache
+# Vale - grammar checker and style lint.
+# Synced style packages are disposable, but the hand-written vocabulary is not,
+# so keep .vale/styles/config out of the ignore. Git will not descend into an
+# ignored directory, hence the step-by-step re-inclusion.
+.vale/*
+!.vale/styles
+.vale/styles/*
+!.vale/styles/config
+# Added by goreleaser init:
+dist/
+# 
+*.binpb
+# rapid writes a reproducer here when a property fails; a local artifact, not a fixture.
+testdata/rapid/
+*/testdata/rapid/
+
+# mutago reports.
+mutago-report.html
+mutago-agentic.json
+mutago-gitlab.json
+
+# Local notes, kept out of the public repository: the to-do list, and instructions
+# that name private repositories.
+TODO.md
+KHAN-README.md

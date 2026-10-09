@@ -1,0 +1,61 @@
+name: Mutation testing
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  GOTOOLCHAIN: local
+jobs:
+  mutate:
+    name: Mutate changed lines
+    runs-on: ubuntu-latest
+    # A pull request's changed lines are a small fraction of the module's mutants, but each
+    # mutant reruns the end-to-end test. The ceiling is for a mutant that turns a loop
+    # infinite and is not caught by mutago's own per-mutant timeout.
+    timeout-minutes: 60
+    # --logger-github writes ::warning lines to the log, which needs no token.
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        # --git-diff-lines needs the base revision to diff against.
+        fetch-depth: 0
+        # Nothing after the checkout talks to the remote, so the token has no reason to
+        # stay in .git/config while mutated pull-request code runs.
+        persist-credentials: "false"
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: "1.27"
+    - name: Mutate the lines this pull request changed
+      # Scoped to changed lines because mutating internal/gcpperms alone runs the suite once
+      # per mutant for over two hours, which is minutes of CI for a result nobody reads on
+      # an unrelated change.
+      #
+      # mutago is pinned, as in the justfile: a mutator added in a new release changes the
+      # escape set on a pull request that changed nothing, and v2.10.24 is the first release
+      # whose source annotations suppress composite/field-clear, which
+      # internal/gcpperms/table.go relies on. mutago reads .mutago.yml only when told to.
+      #
+      # No -short: the end-to-end analyzer test is what kills mutants in the call graph
+      # walk. A high --timeout-coefficient keeps slow mutants from counting as killed.
+      # RAPID_NOFAILFILE stops rapid writing a failure file for every mutant it kills.
+      #
+      # No --min-msi: the floor for internal/gcpperms is checked by `just mutate`, against
+      # its baseline. --logger-github annotates surviving mutants on the diff instead.
+      #
+      # On workflow_dispatch there is no pull request, so the base falls back to main.
+      env:
+        RAPID_NOFAILFILE: "true"
+      run: |
+        go run github.com/quality-gates/mutago/v2/cmd/mutago@v2.10.24 \
+          --config=.mutago.yml \
+          --baseline=internal/gcpperms/mutago-baseline.json \
+          --git-diff-lines \
+          --git-diff-base="${{ github.event.pull_request.base.sha || 'origin/main' }}" \
+          --timeout-coefficient=15 \
+          --logger-github --quiet --no-diffs \
+          ./internal/... ./cmd/...

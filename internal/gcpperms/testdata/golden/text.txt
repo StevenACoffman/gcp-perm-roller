@@ -1,0 +1,35 @@
+== example.com/one
+  Permissions:
+    datastore.entities.get                        datastore.Client.Get, datastore.Client.Run
+    datastore.entities.list                       datastore.Client.Run
+    storage.objects.create                        storage.ObjectHandle.NewWriter
+  Conditional permissions:
+    storage.objects.delete                        storage.ObjectHandle.NewWriter
+  APIs: datastore.googleapis.com, storage.googleapis.com
+  Notes:
+    datastore.Client.Run: keys-only queries need only datastore.entities.list
+    storage.ObjectHandle.NewWriter: storage.objects.delete is needed to overwrite an existing object
+  Unmapped SDK calls (add rules to table.go):
+    cloud.google.com/go/spanner.Client.Single
+      one/db.go:3
+      one/db.go:9
+
+== example.com/notes
+  APIs: sheets.googleapis.com
+  Notes:
+    sheets/v4.SpreadsheetsGetCall.Do: not IAM: needs an OAuth scope
+
+== example.com/empty
+  no Google Cloud API calls
+
+== example.com/mixed
+  Notes:
+    google.Exchange: needs an OAuth client
+  Unmapped SDK calls (add rules to table.go):
+    cloud.google.com/go/bigtable.Client.Open
+      mixed/main.go:2
+
+== example.com/two
+  Permissions:
+    pubsub.topics.publish                         pubsub/v2.Publisher.Publish
+  APIs: pubsub.googleapis.com

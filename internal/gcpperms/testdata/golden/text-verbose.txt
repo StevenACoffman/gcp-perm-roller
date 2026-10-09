@@ -1,0 +1,52 @@
+== example.com/one
+  Permissions:
+    datastore.entities.get                        datastore.Client.Get, datastore.Client.Run
+    datastore.entities.list                       datastore.Client.Run
+    storage.objects.create                        storage.ObjectHandle.NewWriter
+  Conditional permissions:
+    storage.objects.delete                        storage.ObjectHandle.NewWriter
+  APIs: datastore.googleapis.com, storage.googleapis.com
+  Notes:
+    datastore.Client.Run: keys-only queries need only datastore.entities.list
+    storage.ObjectHandle.NewWriter: storage.objects.delete is needed to overwrite an existing object
+  Unmapped SDK calls (add rules to table.go):
+    cloud.google.com/go/spanner.Client.Single
+      one/db.go:3
+      one/db.go:9
+  Call sites:
+    cloud.google.com/go/datastore.Client.Get
+      one/main.go:10
+      one/main.go:20
+    cloud.google.com/go/datastore.Client.Run
+      one/query.go:5
+    cloud.google.com/go/storage.ObjectHandle.NewWriter
+      one/upload.go:7
+
+== example.com/notes
+  APIs: sheets.googleapis.com
+  Notes:
+    sheets/v4.SpreadsheetsGetCall.Do: not IAM: needs an OAuth scope
+  Call sites:
+    google.golang.org/api/sheets/v4.SpreadsheetsGetCall.Do
+      notes/sheet.go:1
+
+== example.com/empty
+  no Google Cloud API calls
+
+== example.com/mixed
+  Notes:
+    google.Exchange: needs an OAuth client
+  Unmapped SDK calls (add rules to table.go):
+    cloud.google.com/go/bigtable.Client.Open
+      mixed/main.go:2
+  Call sites:
+    golang.org/x/oauth2/google.Exchange
+      mixed/main.go:8
+
+== example.com/two
+  Permissions:
+    pubsub.topics.publish                         pubsub/v2.Publisher.Publish
+  APIs: pubsub.googleapis.com
+  Call sites:
+    cloud.google.com/go/pubsub/v2.Publisher.Publish
+      two/main.go:4

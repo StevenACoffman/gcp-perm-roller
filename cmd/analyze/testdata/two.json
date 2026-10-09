@@ -1,0 +1,25 @@
+{
+  "binaries": [
+    {
+      "package": "example.org/two",
+      "calls": [
+        {
+          "api": "cloud.google.com/go/datastore.Client.Get",
+          "mapped": true,
+          "permissions": ["datastore.entities.get"],
+          "sites": [{"file": "two/main.go", "line": 3}]
+        },
+        {
+          "api": "cloud.google.com/go/pubsub/v2.Publisher.Publish",
+          "mapped": true,
+          "permissions": ["pubsub.topics.publish"],
+          "sites": [{"file": "two/main.go", "line": 9}]
+        },
+        {
+          "api": "cloud.google.com/go/spanner.Client.Single",
+          "sites": [{"file": "two/db.go", "line": 4}]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "binaries": [
+    {
+      "package": "example.com/one/cmd/a",
+      "calls": [
+        {
+          "api": "cloud.google.com/go/datastore.Client.Get",
+          "mapped": true,
+          "permissions": ["datastore.entities.get"],
+          "sites": [{"file": "a/main.go", "line": 10}]
+        },
+        {
+          "api": "cloud.google.com/go/storage.ObjectHandle.NewWriter",
+          "mapped": true,
+          "permissions": ["storage.objects.create"],
+          "conditional": ["storage.objects.delete"],
+          "note": "storage.objects.delete is needed to overwrite an existing object",
+          "sites": [{"file": "a/upload.go", "line": 7}]
+        }
+      ]
+    },
+    {"package": "example.com/one/cmd/idle", "calls": null}
+  ],
+  "skipped": ["example.com/one/cmd/broken"]
+}

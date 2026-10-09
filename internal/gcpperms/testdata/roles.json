@@ -1,0 +1,2 @@
+[{"name": "roles/a.viewer", "title": "A Viewer", "stage": "BETA", "includedPermissions": ["a.things.get"]},
+ {"name": "roles/a.old", "title": "A Old", "stage": "GA", "deleted": true, "includedPermissions": []}]

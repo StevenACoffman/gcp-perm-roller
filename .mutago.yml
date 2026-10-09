@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/quality-gates/mutago/master/schema/config-schema.json
+#
+# Mutation testing configuration.
+#
+# Mutation testing answers a question coverage cannot: not "was this line executed?" but
+# "would any test have noticed if it behaved differently?". A surviving mutant marks a line the
+# suite runs without checking.
+#
+# A score is still a metric, and a metric written to is a metric gamed. Read survivors as a
+# prompt — is this behaviour worth pinning, or is the mutant indifferent? — rather than as a list
+# of tests to add. Thresholds live in the justfile recipe that names the scope, not here, because
+# the right floor depends on what is being mutated: internal/gcpperms carries the analysis and
+# role selection, and is the package with a recorded floor.
+#
+# mutago reads this file only when given --config=.mutago.yml; the justfile recipes pass it.
+#
+# Mutants that no test can kill because the mutated code behaves the same are recorded in
+# internal/gcpperms/mutago-baseline.json; the README explains each one.
+
+# Tests for a file live in several _test.go files, not one named after it.
+skip_without_test: false
+skip_with_build_tags: true
+
+exclude_dirs:
+  # The release helper, which the suite does not exercise at all.
+  - bin
+  # Programs the end-to-end test analyzes, and saved documentation fixtures: inputs, not code.
+  - internal/gcpperms/testdata
+  - internal/verifytable/testdata
+
+ignore_source_lines:
+  - "// Code generated"
+  # The permission table in internal/gcpperms/table.go is data checked against the GCP docs
+  # (by verify-table), not logic: a mutant that blanks a rule's permissions can only be caught
+  # by a test that restates the table. Skip the data lines; lookup, splitAPI, and serviceFor
+  # are still mutated. A mutant that clears a field of a multi-line rule is placed on the
+  # rule's opening "{" line, which these patterns cannot single out from other files' code;
+  # a mutator-disable-regexp annotation in table.go skips those instead.
+  - '^\s*\{Pattern: '
+  - '^\s*(Pattern|Perms|Maybe|Note):'
+  - '^\s*"[a-z]+\.[a-zA-Z]+\.[a-zA-Z]+",$'
+  - '^\s*\{"[^"]+", "[a-z]+\.googleapis\.com"\},$'

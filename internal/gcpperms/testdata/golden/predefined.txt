@@ -1,0 +1,20 @@
+== example.com/one
+  Predefined roles (2 permissions beyond those required):
+    roles/datastore.user                          Cloud Datastore User, 3 permissions
+      for datastore.entities.create, datastore.entities.get
+    roles/storage.objectViewer                    Storage Object Viewer, 2 permissions
+      for storage.objects.get
+  Granted by no allowed predefined role (use a custom role):
+    nope.x.y
+
+== example.com/none
+  no permissions required
+
+== example.com/unselected
+  no permissions required
+
+== example.com/greedy
+  Predefined roles (8 permissions beyond those required):
+    roles/big.admin                               Big Admin, 9 permissions
+      for big.a.get
+  Some roles were chosen greedily; a smaller set may exist.

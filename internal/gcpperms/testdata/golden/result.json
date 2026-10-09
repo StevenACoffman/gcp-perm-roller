@@ -1,0 +1,76 @@
+{
+  "binaries": [
+    {
+      "package": "example.com/one",
+      "calls": [
+        {
+          "api": "cloud.google.com/go/datastore.Client.Get",
+          "mapped": true,
+          "permissions": [
+            "datastore.entities.get"
+          ],
+          "sites": [
+            {
+              "file": "one/main.go",
+              "line": 10
+            },
+            {
+              "file": "one/main.go",
+              "line": 20
+            }
+          ]
+        },
+        {
+          "api": "cloud.google.com/go/datastore.Client.Run",
+          "mapped": true,
+          "permissions": [
+            "datastore.entities.get",
+            "datastore.entities.list"
+          ],
+          "note": "keys-only queries need only datastore.entities.list",
+          "sites": [
+            {
+              "file": "one/query.go",
+              "line": 5
+            }
+          ]
+        },
+        {
+          "api": "cloud.google.com/go/storage.ObjectHandle.NewWriter",
+          "mapped": true,
+          "permissions": [
+            "storage.objects.create"
+          ],
+          "conditional": [
+            "storage.objects.delete",
+            "datastore.entities.get"
+          ],
+          "note": "storage.objects.delete is needed to overwrite an existing object",
+          "sites": [
+            {
+              "file": "one/upload.go",
+              "line": 7
+            }
+          ]
+        },
+        {
+          "api": "cloud.google.com/go/spanner.Client.Single",
+          "mapped": false,
+          "sites": [
+            {
+              "file": "one/db.go",
+              "line": 3
+            },
+            {
+              "file": "one/db.go",
+              "line": 9
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "skipped": [
+    "example.com/broken"
+  ]
+}

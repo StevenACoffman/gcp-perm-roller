@@ -1,0 +1,10 @@
+[
+  {"name": "roles/datastore.viewer", "title": "Datastore Viewer", "stage": "GA",
+   "includedPermissions": ["datastore.entities.get", "datastore.entities.list"]},
+  {"name": "roles/storage.objectCreator", "title": "Storage Object Creator", "stage": "GA",
+   "includedPermissions": ["storage.objects.create"]},
+  {"name": "roles/storage.objectUser", "title": "Storage Object User", "stage": "GA",
+   "includedPermissions": ["storage.objects.create", "storage.objects.delete", "storage.objects.get"]},
+  {"name": "roles/pubsub.publisher", "title": "Pub/Sub Publisher", "stage": "BETA",
+   "includedPermissions": ["pubsub.topics.publish"]}
+]

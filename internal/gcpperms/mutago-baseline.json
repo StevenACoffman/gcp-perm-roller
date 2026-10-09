@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "mutants": [
+    {
+      "id": "289cdd61032c6f88493fd9f33d92f649",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "numbers/decrementer",
+      "line": 225
+    },
+    {
+      "id": "2241543af7b92ed3012e0c874e179ec6",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "expression/error-guard",
+      "line": 246
+    },
+    {
+      "id": "aa4d85728b0697e5331556fb8ae19b65",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "branch/if",
+      "line": 247
+    },
+    {
+      "id": "537211bfda46710dc1ec72cea9769fb6",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "statement/return",
+      "line": 247
+    },
+    {
+      "id": "84c8525c8c44ebc1a8b1617099c5101b",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "statement/defer-remove",
+      "line": 330
+    },
+    {
+      "id": "7af176c9cc254d98433891f8a639a3a8",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "expression/context-nil",
+      "line": 99
+    },
+    {
+      "id": "32efe01cef59c0c6351fc5cc0b776635",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "expression/error-guard",
+      "line": 143
+    },
+    {
+      "id": "4bf5a1115b9dea4ba4b269dab9d5b64b",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/if",
+      "line": 144
+    },
+    {
+      "id": "b6076d255843c3eb764061440794ab5a",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "expression/error-guard",
+      "line": 162
+    },
+    {
+      "id": "ceba4efa489d7a449f463453c5557202",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/if",
+      "line": 163
+    },
+    {
+      "id": "264cd2c332c320e704bae9dfc6945d43",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/case",
+      "line": 175
+    },
+    {
+      "id": "264cd2c332c320e704bae9dfc6945d43",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/case",
+      "line": 186
+    },
+    {
+      "id": "264cd2c332c320e704bae9dfc6945d43",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/case",
+      "line": 188
+    },
+    {
+      "id": "264cd2c332c320e704bae9dfc6945d43",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/case",
+      "line": 190
+    },
+    {
+      "id": "9e4170ff71d3bbbf545834b2eb59b36c",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 314
+    },
+    {
+      "id": "d299bdbde190ebf9c1cd4251c7fdab6e",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "conditional/bool-literal",
+      "line": 375
+    },
+    {
+      "id": "c5e84e639c757b87b6045b02ff3d568b",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "loop/range_break",
+      "line": 402
+    },
+    {
+      "id": "fea5ae7a31873742aea9ec85370881e0",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "statement/remove",
+      "line": 403
+    },
+    {
+      "id": "5be6e1e401b3d3e3d4fe42df1ec2f11c",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "expression/comparison",
+      "line": 454
+    },
+    {
+      "id": "0a5e0f7bd919199fc5c183dd74a672e3",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 454
+    },
+    {
+      "id": "e54b7f055e8938edc95466b9e1989fcb",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 463
+    },
+    {
+      "id": "43dca5ae92fe24aa85e408aca3411831",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 465
+    },
+    {
+      "id": "f87694a25adaae81e6cc177e6e31c05b",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 478
+    },
+    {
+      "id": "c5709efb062f492f6bf0d7ee1435da64",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "expression/comparison",
+      "line": 486
+    },
+    {
+      "id": "aae430c0689c80985ac527c19e35aee5",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 492
+    },
+    {
+      "id": "ec5adb039a3be4a9170e026cf17e7c6b",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "expression/remove",
+      "line": 493
+    },
+    {
+      "id": "9cb1255f60746eee2e877f671771db8a",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 526
+    },
+    {
+      "id": "b868ff029cf5add2baf4b70a346e0528",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 526
+    },
+    {
+      "id": "daa9cde19f64bb5936e8f045035934ed",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 532
+    },
+    {
+      "id": "8debb53da2ec69043ab30927ae958b46",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 532
+    },
+    {
+      "id": "b37cff8f50f58963de89d6e705a01273",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 532
+    },
+    {
+      "id": "b178256e0a4ea06d38585b9c8c488046",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/incrementer",
+      "line": 532
+    },
+    {
+      "id": "5292a510a073fa2f58dfb74f9076237b",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 535
+    },
+    {
+      "id": "e3f572740f5353d9bcf0524f3cc3e88e",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "branch/if",
+      "line": 536
+    },
+    {
+      "id": "0c57141cdc80ee03538962c73b19384d",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "statement/remove",
+      "line": 628
+    }
+  ]
+}

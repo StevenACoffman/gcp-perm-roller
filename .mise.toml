@@ -1,0 +1,78 @@
+[tools]
+go = "latest"
+golangci-lint = "latest"
+goreleaser = "latest"
+"github:gotestyourself/gotestsum" = "latest"
+# Mutation testing, pinned to the version the justfile and the mutation workflow run:
+# v2.10.24 is the first whose annotations suppress composite/field-clear, which
+# internal/gcpperms/table.go relies on. Needs a Go 1.26+ toolchain.
+"go:github.com/quality-gates/mutago/v2/cmd/mutago" = "2.10.24"
+# Known-vulnerability scan of the module and its dependencies; CI's vulncheck job
+# runs it after mise-action installs these tools.
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+# supply-chain tooling: syft generates the SBOM, cosign signs the checksum.
+syft = "latest"
+cosign = "latest"
+
+[env]
+LOG_LEVEL = "debug"
+
+[tasks.sbom]
+description = "Build the source tarball + SBOM locally (goreleaser snapshot; signing skipped)"
+run = "goreleaser release --snapshot --clean --skip=sign"
+
+[tasks.check]
+description = "Validate the goreleaser configuration"
+run = "goreleaser check"
+
+[tasks.run]
+description = "Run the main application"
+run = "go run ."
+
+[tasks.build]
+description = "Build the binary with goreleaser"
+run = "goreleaser build --snapshot --clean"
+
+[tasks.test]
+description = "Run all go tests using gotestsum"
+run = "gotestsum ./..."
+
+[tasks."test:watch"]
+description = "Run all go tests in watch mode"
+run = "gotestsum --watch -- -v ./..."
+
+[tasks.coverage]
+description = "Run tests with race detection and coverage"
+run = "go test -race -coverprofile=coverage.out -covermode=atomic ./... -v -cover"
+
+[tasks.tidy]
+description = "Run go mod tidy"
+run = "go mod tidy"
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run ./..."
+
+[tasks.fmt]
+description = "Run golangci-lint fmt"
+run = "golangci-lint fmt"
+
+# The rapid properties run 100 times each in the unit suite; this is the deeper sweep CI's
+# property workflow runs.
+[tasks.proptest]
+description = "Check the rapid properties with more attempts than the default"
+run = "go test -short ./internal/... -rapid.checks=1000"
+
+# mutago reads .mutago.yml only when given --config. These match the justfile's recipes,
+# which explain the flags.
+[tasks.mutate]
+description = "Mutate internal/gcpperms against its baseline (over two hours); fails below 95% MSI"
+run = "RAPID_NOFAILFILE=true mutago --config=.mutago.yml --baseline=internal/gcpperms/mutago-baseline.json --min-msi=95 --workers=4 --timeout-coefficient=15 --quiet --no-diffs ./internal/gcpperms/"
+
+[tasks."mutate:diff"]
+description = "Mutate only the lines this branch changed (default base main; mise run mutate:diff --git-diff-base=origin/main)"
+run = "RAPID_NOFAILFILE=true mutago --config=.mutago.yml --baseline=internal/gcpperms/mutago-baseline.json --git-diff-lines --git-diff-base=main --timeout-coefficient=15 --quiet --no-diffs ./internal/... ./cmd/..."
+
+[tasks."mutate:survivors"]
+description = "Write mutago-agentic.json listing the internal/gcpperms mutants no test killed"
+run = "RAPID_NOFAILFILE=true mutago --config=.mutago.yml --baseline=internal/gcpperms/mutago-baseline.json --workers=4 --timeout-coefficient=15 --quiet --no-diffs --logger-agentic-json ./internal/gcpperms/"
