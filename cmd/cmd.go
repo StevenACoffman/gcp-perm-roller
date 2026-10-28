@@ -21,6 +21,7 @@ import (
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/root"
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/verifytable"
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/version"
+	"github.com/StevenACoffman/gcp-perm-roller/cmd/wrappers"
 )
 
 // Run parses args and dispatches to the matching command.
@@ -43,6 +44,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	version.New(r)
 	// register new commands here
 
+	wrappers.New(r)
 	if err := r.Command.Parse(args, ff.WithEnvVarPrefix("GCP_PERM_ROLLER")); err != nil {
 		// --help asked for help, and any other parse failure (an unknown flag,
 		// a bad flag value) is the command line's fault, so both show it.

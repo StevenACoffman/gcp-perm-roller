@@ -41,19 +41,20 @@ gcp-perm-roller analyze -C ~/src/two --format=json ./cmd/... >two.json
 gcp-perm-roller analyze --from=one.json --from=two.json --union --format=predefined
 ```
 
-| Flag           | Meaning                                                                     |
-| -------------- | --------------------------------------------------------------------------- |
-| `-C`, `--dir`  | Workspace or module to analyze (default `.`)                                |
-| `--format`     | `text` (default), `json`, `role` (gcloud custom role YAML), or `predefined` |
-| `--union`      | Merge every binary into a single report                                     |
-| `-v`           | Show call sites for each SDK call (text format)                             |
-| `--strict`     | Exit non-zero when an SDK call has no rule in `table.go`                    |
-| `--outdir`     | Write one file per binary to a directory instead of stdout                  |
-| `--tags`       | A build tag; repeat the flag for more                                       |
-| `--algo`       | Call graph algorithm: `vta` (default) or `rta`                              |
-| `-j`, `--jobs` | Binaries analyzed in parallel (default GOMAXPROCS, at most 4)               |
-| `--wrapper`    | A function that calls its function arguments by reflection; repeatable      |
-| `--from`       | Read results saved with `--format=json` instead of analyzing; repeatable    |
+| Flag             | Meaning                                                                     |
+| ---------------- | --------------------------------------------------------------------------- |
+| `-C`, `--dir`    | Workspace or module to analyze (default `.`)                                |
+| `--format`       | `text` (default), `json`, `role` (gcloud custom role YAML), or `predefined` |
+| `--union`        | Merge every binary into a single report                                     |
+| `-v`             | Show call sites for each SDK call (text format)                             |
+| `--strict`       | Exit non-zero when an SDK call has no rule in `table.go`                    |
+| `--outdir`       | Write one file per binary to a directory instead of stdout                  |
+| `--tags`         | A build tag; repeat the flag for more                                       |
+| `--algo`         | Call graph algorithm: `vta` (default) or `rta`                              |
+| `-j`, `--jobs`   | Binaries analyzed in parallel (default GOMAXPROCS, at most 4)               |
+| `--wrapper`      | A function that calls its function arguments by reflection; repeatable      |
+| `--wrapper-file` | Wrappers saved by the `wrappers` command; repeatable                        |
+| `--from`         | Read results saved with `--format=json` instead of analyzing; repeatable    |
 
 Every flag can also be set with an environment variable: prefix `GCP_PERM_ROLLER_`,
 uppercase it, and replace dashes with underscores (`GCP_PERM_ROLLER_FORMAT=json`).
@@ -382,6 +383,49 @@ package path, and `go test` passes everything after an unrecognized flag to the
 test binary. The tests would then run in the wrong directory, and every mutant
 would escape.
 
+## Reflection Wrappers
+
+`gcp-perm-roller wrappers` finds the functions in a workspace that call a function passed
+to them by reflection, and saves them as JSON for `analyze --wrapper-file`:
+
+```sh
+gcp-perm-roller wrappers -C ~/src/monorepo --out=wrappers.json
+gcp-perm-roller analyze -C ~/src/monorepo --wrapper-file=wrappers.json ./services/billing/cmd/...
+```
+
+A function is a wrapper when a `reflect.Value` it makes from one of its parameters with
+`reflect.ValueOf` is called with `reflect.Value.Call` or `CallSlice`. The call can be in the
+function, in a closure it creates (such as one passed to `reflect.MakeFunc`), through a method
+value (`next := v.Call`), or in a helper it passes the value to, at any depth. Each entry
+records the parameters whose functions are called, so only those arguments count as
+called; where the wrapper is declared; how many calls to it the search saw; and how it
+calls them:
+
+```json
+{
+  "wrappers": [
+    {
+      "function": "example.com/mymodule/pkg/cache.Cache",
+      "params": [
+        0
+      ],
+      "site": {
+        "file": "pkg/cache/api.go",
+        "line": 96
+      },
+      "calls": 252,
+      "reason": "passes parameter 0 to reflect.ValueOf and calls it through wrapCall"
+    }
+  ]
+}
+```
+
+Only the packages the patterns name are loaded from source, with dependencies' types
+from compiled export data, and no call graph is built, so searching a large module is far
+cheaper than analyzing it. Wrappers that keep the function in a struct field or a global
+before calling it are not found; add them to the file by hand. An entry needs only
+`function`; without `params`, every function argument counts.
+
 ## Limitations
 
 - The report is an upper bound on what a binary can do. VTA still over-approximates
@@ -393,9 +437,11 @@ would escape.
   code that caches function results by reflection: a memoizing wrapper that builds its
   result with `reflect.MakeFunc` hides from VTA every SDK call behind a cached function.
   Name such wrappers with `--wrapper`, for example
-  `--wrapper=example.com/mymodule/pkg/cache.Cache`: each call to one then counts as calling
-  every function passed to it, which brings those calls back while VTA still leaves out
-  RTA's false positives, such as clients a binary holds but never uses.
+  `--wrapper=example.com/mymodule/pkg/cache.Cache`, or find them with the `wrappers`
+  command and load them with `--wrapper-file` (see [Reflection Wrappers](#reflection-wrappers)):
+  each call to one then counts as calling every function passed to it, which brings those
+  calls back while VTA still leaves out RTA's false positives, such as clients a binary
+  holds but never uses.
 - Calls through standard-library or third-party interfaces (`io.Closer`, `error`) are
   not followed. They match too many SDK types to be useful, and the operations that need
   permissions are reached by name elsewhere.
