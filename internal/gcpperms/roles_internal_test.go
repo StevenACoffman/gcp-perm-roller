@@ -736,6 +736,90 @@ func TestLoadRolesFromAPI(t *testing.T) {
 	equals(t, len(views), 0)
 }
 
+func TestLoadRoles(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"roles": []map[string]any{{"name": "roles/from.api", "stage": "GA"}},
+		})
+	}))
+	defer srv.Close()
+	tests := map[string]struct {
+		from string
+		want string
+	}{
+		"the API": {from: "api", want: "roles/from.api"},
+		"a path":  {from: filepath.Join("testdata", "roles"), want: "roles/datastore.user"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			roles, err := LoadRoles(
+				context.Background(), tc.from,
+				option.WithEndpoint(srv.URL), option.WithoutAuthentication(),
+			)
+			ok(t, err)
+			equals(t, roles[0].Name, tc.want)
+		})
+	}
+}
+
+func TestLoadRolesByName(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		name := strings.TrimPrefix(r.URL.Path, "/v1/")
+		if strings.HasSuffix(name, "/gone") {
+			http.Error(w, `{"error": {"code": 404, "message": "not found"}}`, http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name":                name,
+			"title":               "T",
+			"stage":               "GA",
+			"includedPermissions": []string{"x.y.get"},
+		})
+	}))
+	defer srv.Close()
+	load := func(names ...string) ([]Role, error) {
+		return LoadRolesByName(
+			context.Background(), names,
+			option.WithEndpoint(srv.URL), option.WithoutAuthentication(),
+		)
+	}
+	names := []string{"projects/p/roles/a", "organizations/1/roles/b", "roles/c.user"}
+	roles, err := load(names...)
+	ok(t, err)
+	// spec: each role is got by its full name, whatever collection it is in.
+	equals(
+		t,
+		paths,
+		[]string{"/v1/projects/p/roles/a", "/v1/organizations/1/roles/b", "/v1/roles/c.user"},
+	)
+	want := make([]Role, 0, len(names))
+	for _, n := range names {
+		want = append(
+			want,
+			Role{Name: n, Title: "T", Stage: "GA", Permissions: []string{"x.y.get"}},
+		)
+	}
+	equals(t, roles, want)
+
+	// spec: a role that cannot be got fails the load, naming the role.
+	_, err = load("projects/p/roles/a", "projects/p/roles/gone")
+	if err == nil || !strings.Contains(err.Error(), "projects/p/roles/gone") {
+		t.Fatalf("got %v, want an error naming the missing role", err)
+	}
+	// spec: nothing to get is not an error.
+	roles, err = load()
+	ok(t, err)
+	equals(t, len(roles), 0)
+	// Conflicting options make the client fail to build.
+	if _, err := LoadRolesByName(
+		context.Background(), names, option.WithoutAuthentication(), option.WithAPIKey("k"),
+	); err == nil {
+		t.Fatal("LoadRolesByName succeeded with conflicting options")
+	}
+}
+
 func TestWritePredefinedRolesMatchesGolden(t *testing.T) {
 	sel := SelectRoles(
 		[]string{

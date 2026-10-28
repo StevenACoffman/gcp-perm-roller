@@ -251,9 +251,9 @@ func (cfg *Config) selectRoles(ctx context.Context, bins []gcpperms.Binary) erro
 	if from == "" {
 		return nil
 	}
-	roles, err := loadRoles(ctx, from)
+	roles, err := gcpperms.LoadRoles(ctx, from)
 	if err != nil {
-		return err
+		return fmt.Errorf("loading predefined roles: %w", err)
 	}
 	stages := cfg.RoleStages
 	if len(stages) == 0 {
@@ -440,21 +440,4 @@ func packageDir(pkg string, mods map[string]string, base string) string {
 		return pkg
 	}
 	return filepath.ToSlash(rel)
-}
-
-// loadRoles reads predefined roles from the IAM API, or from a saved copy.
-func loadRoles(ctx context.Context, from string) ([]gcpperms.Role, error) {
-	var (
-		roles []gcpperms.Role
-		err   error
-	)
-	if from == "api" {
-		roles, err = gcpperms.LoadRolesFromAPI(ctx)
-	} else {
-		roles, err = gcpperms.LoadRolesFromPath(from)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("loading predefined roles: %w", err)
-	}
-	return roles, nil
 }

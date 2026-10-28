@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"google.golang.org/api/googleapi"
 	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 )
@@ -90,6 +91,16 @@ type bitset []uint64
 // unionFind is a disjoint-set forest over 0..n-1.
 type unionFind []int
 
+// LoadRoles loads predefined roles from where a --roles flag says: "api"
+// lists them from the IAM API (see LoadRolesFromAPI, which opts configure),
+// and anything else is a path LoadRolesFromPath reads.
+func LoadRoles(ctx context.Context, from string, opts ...option.ClientOption) ([]Role, error) {
+	if from == "api" {
+		return LoadRolesFromAPI(ctx, opts...)
+	}
+	return LoadRolesFromPath(from)
+}
+
 // LoadRolesFromAPI lists every predefined role, with its permissions, from
 // the IAM API. It needs credentials (Application Default Credentials by
 // default) but no IAM permission: any authenticated principal can list
@@ -107,18 +118,37 @@ func LoadRolesFromAPI(ctx context.Context, opts ...option.ClientOption) ([]Role,
 		PageSize(1000).
 		Pages(ctx, func(page *iam.ListRolesResponse) error {
 			for _, r := range page.Roles {
-				roles = append(roles, Role{
-					Name:        r.Name,
-					Title:       r.Title,
-					Stage:       r.Stage,
-					Deleted:     r.Deleted,
-					Permissions: r.IncludedPermissions,
-				})
+				roles = append(roles, roleFromAPI(r))
 			}
 			return nil
 		})
 	if err != nil {
 		return nil, errors.Wrap(err, op)
+	}
+	return roles, nil
+}
+
+// LoadRolesByName gets each named role from the IAM API: a predefined role
+// ("roles/…") or a custom role of a project ("projects/P/roles/…") or an
+// organization ("organizations/O/roles/…"). Getting a custom role needs
+// iam.roles.get on its project or organization.
+func LoadRolesByName(
+	ctx context.Context,
+	names []string,
+	opts ...option.ClientOption,
+) ([]Role, error) {
+	const op = "gcpperms.LoadRolesByName"
+	svc, err := iam.NewService(ctx, opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, op)
+	}
+	roles := make([]Role, 0, len(names))
+	for _, name := range names {
+		r, err := getRole(ctx, svc, name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "%s: %s", op, name)
+		}
+		roles = append(roles, roleFromAPI(r))
 	}
 	return roles, nil
 }
@@ -155,6 +185,35 @@ func LoadRolesFromPath(path string) ([]Role, error) {
 		roles = append(roles, r)
 	}
 	return roles, nil
+}
+
+// getRole gets the role name through the IAM API collection it belongs to.
+func getRole(ctx context.Context, svc *iam.Service, name string) (*iam.Role, error) {
+	var get func(...googleapi.CallOption) (*iam.Role, error)
+	switch {
+	case strings.HasPrefix(name, "projects/"):
+		get = svc.Projects.Roles.Get(name).Context(ctx).Do
+	case strings.HasPrefix(name, "organizations/"):
+		get = svc.Organizations.Roles.Get(name).Context(ctx).Do
+	default:
+		get = svc.Roles.Get(name).Context(ctx).Do
+	}
+	r, err := get()
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return r, nil
+}
+
+// roleFromAPI is r, as the IAM API returns it, as a Role.
+func roleFromAPI(r *iam.Role) Role {
+	return Role{
+		Name:        r.Name,
+		Title:       r.Title,
+		Stage:       r.Stage,
+		Deleted:     r.Deleted,
+		Permissions: r.IncludedPermissions,
+	}
 }
 
 func readJSONFile(file string, v any) error {
