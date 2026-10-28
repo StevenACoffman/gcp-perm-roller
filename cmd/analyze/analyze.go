@@ -65,6 +65,7 @@ type Config struct {
 	Jobs            int
 	Algo            string
 	Wrappers        []string
+	WrapperFiles    []string
 	From            []string
 	Flags           *ff.FlagSet
 	Command         *ff.Command
@@ -121,6 +122,8 @@ func (cfg *Config) bindFlags() {
 	cfg.Flags.StringListVar(&cfg.Wrappers, 0, "wrapper",
 		"function, as importpath.Func, that calls the functions passed to it by reflection, "+
 			"such as a memoizing cache; calls to it count as calling them under vta; repeatable")
+	cfg.Flags.StringListVar(&cfg.WrapperFiles, 0, "wrapper-file",
+		"read wrappers from this file, as the wrappers command writes them; repeatable")
 	cfg.Flags.StringListVar(&cfg.From, 0, "from",
 		"read results saved with --format=json from this file instead of analyzing; "+
 			"repeatable, to combine workspaces (with --union, into one report)")
@@ -175,13 +178,17 @@ func (cfg *Config) analyze(ctx context.Context, patterns []string) (gcpperms.Res
 			return gcpperms.Result{}, fmt.Errorf("analyze: %w", err)
 		}
 	}
+	wrappers, err := cfg.wrappers()
+	if err != nil {
+		return gcpperms.Result{}, err
+	}
 	res, err := gcpperms.Analyze(&gcpperms.Config{
 		Dir:         cfg.Dir,
 		Patterns:    patterns,
 		Algorithm:   algorithm,
 		Parallelism: cfg.Jobs,
 		Tags:        cfg.Tags,
-		Wrappers:    cfg.wrappers(),
+		Wrappers:    wrappers,
 	})
 	if err != nil {
 		return gcpperms.Result{}, fmt.Errorf("analyze: %w", err)
@@ -199,13 +206,20 @@ func (cfg *Config) analyze(ctx context.Context, patterns []string) (gcpperms.Res
 }
 
 // wrappers returns the wrappers --wrapper names, each calling every
-// function passed to it.
-func (cfg *Config) wrappers() []gcpperms.Wrapper {
+// function passed to it, and those --wrapper-file lists.
+func (cfg *Config) wrappers() ([]gcpperms.Wrapper, error) {
 	var out []gcpperms.Wrapper
 	for _, w := range cfg.Wrappers {
 		out = append(out, gcpperms.Wrapper{Function: w})
 	}
-	return out
+	for _, file := range cfg.WrapperFiles {
+		ws, err := gcpperms.LoadWrappers(file)
+		if err != nil {
+			return nil, fmt.Errorf("analyze: %w", err)
+		}
+		out = append(out, ws...)
+	}
+	return out, nil
 }
 
 // loadResults reads and concatenates results saved with --format=json.
@@ -294,6 +308,9 @@ func (cfg *Config) commandLine() string {
 	}
 	for _, w := range cfg.Wrappers {
 		words = append(words, "--wrapper="+w)
+	}
+	for _, f := range cfg.WrapperFiles {
+		words = append(words, "--wrapper-file="+f)
 	}
 	return strings.Join(words, " ")
 }

@@ -353,14 +353,14 @@ func TestCommandLine(t *testing.T) {
 	cfg := Config{
 		Format: "predefined", Roles: "api", RoleStages: []string{"GA", "BETA"},
 		WithConditional: true, Union: true, Verbose: true, Tags: []string{"a", "b"},
-		Algo: "rta", Wrappers: []string{"example.com/x.Cache"},
+		Algo: "rta", Wrappers: []string{"example.com/x.Cache"}, WrapperFiles: []string{"w.json"},
 		Dir: "/somewhere", OutDir: "/elsewhere", From: []string{"x.json"},
 	}
 	// spec: every option that changes the content, and none that says where
 	// it was made or written.
 	equals(t, cfg.commandLine(), "gcp-perm-roller analyze --format=predefined --roles=api "+
 		"--role-stages=GA --role-stages=BETA --include-conditional --union --verbose "+
-		"--tags=a --tags=b --algo=rta --wrapper=example.com/x.Cache")
+		"--tags=a --tags=b --algo=rta --wrapper=example.com/x.Cache --wrapper-file=w.json")
 	equals(t, (&Config{Format: "text", Algo: "vta"}).commandLine(),
 		"gcp-perm-roller analyze --format=text")
 }
@@ -393,7 +393,7 @@ func TestAnalyzeHelp(t *testing.T) {
 		"gcp-perm-roller analyze [FLAGS] [PACKAGES...]",
 		"Analyze builds a whole-program call graph",
 		"--from=one.json --from=two.json --union",
-		"--wrapper", "--from",
+		"--wrapper", "--wrapper-file", "--from",
 	} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help lacks %q:\n%s", want, help)
@@ -448,8 +448,28 @@ func TestAnalyzePackages(t *testing.T) {
 			equals(t, out, "== example.com/_tool/cmd/x\n  no Google Cloud API calls\n")
 		})
 	}
+	// spec: a wrapper file that cannot be read stops the analysis.
+	_, err := runAnalyze(t, "-C", dir, "--wrapper-file=testdata/nope.json")
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("got %v, want a missing wrapper file reported", err)
+	}
+	// spec: wrappers from a file and from --wrapper are both used.
+	wfile := filepath.Join(t.TempDir(), "w.json")
+	ok(
+		t,
+		os.WriteFile(wfile, []byte(`{"wrappers": [{"function": "example.com/_tool/x.F"}]}`), 0o600),
+	)
+	cfg := &Config{Wrappers: []string{"example.com/y.G"}, WrapperFiles: []string{wfile}}
+	ws, err := cfg.wrappers()
+	ok(t, err)
+	equals(
+		t,
+		ws,
+		[]gcpperms.Wrapper{{Function: "example.com/y.G"}, {Function: "example.com/_tool/x.F"}},
+	)
+
 	// spec: patterns that match no binary are an error, not an empty report.
-	_, err := runAnalyze(t, "-C", dir, "./nope/...")
+	_, err = runAnalyze(t, "-C", dir, "./nope/...")
 	if err == nil || !strings.Contains(err.Error(), "analyze: no main packages match ./nope/...") {
 		t.Fatalf("got %v, want an error naming the pattern", err)
 	}
@@ -481,6 +501,7 @@ func TestAnalyzeFlags(t *testing.T) {
 		"-j, --jobs INT",
 		"--algo STRING",
 		"--wrapper STRING",
+		"--wrapper-file STRING",
 		"--from STRING",
 	})
 }
