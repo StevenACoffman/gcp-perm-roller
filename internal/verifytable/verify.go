@@ -15,6 +15,11 @@ const metricWriterReason = "Monitoring documents no permission per method; the p
 	"roles/monitoring.metricWriter, which " +
 	"https://docs.cloud.google.com/stackdriver/docs/instrumentation/setup/go tells you to grant"
 
+// arPatchReason accepts the permissions of Artifact Registry's two patch
+// methods, whose reference pages name none.
+const arPatchReason = "the reference page for this patch method names no permission; iam-dataset's " +
+	"hand-written map pairs the update with a get of what it updates; unconfirmed"
+
 const (
 	// Confirmed means the documentation states what the rule grants.
 	Confirmed Status = iota
@@ -123,6 +128,14 @@ func acceptedReasons() map[string]map[string]string {
 			"cloudprofiler.profiles.update": "the agent uploads each profile with UpdateProfile, whose reference " +
 				"page names no permission; the permission is in roles/cloudprofiler.agent, which " +
 				"https://docs.cloud.google.com/profiler/docs/profiling-go tells you to grant",
+		},
+		"cloud.google.com/go/artifactregistry/apiv1.Client.UpdateTag": {
+			"artifactregistry.tags.update": arPatchReason,
+			"artifactregistry.tags.get":    arPatchReason,
+		},
+		"cloud.google.com/go/artifactregistry/apiv1.Client.UpdateRepository": {
+			"artifactregistry.repositories.update": arPatchReason,
+			"artifactregistry.repositories.get":    arPatchReason,
 		},
 		"cloud.google.com/go/pubsub/v2/apiv1.TopicAdminClient.ListTopicSubscriptions": {
 			"pubsub.topics.get": "Google documents no permission for projects.topics.subscriptions.list; unconfirmed",
