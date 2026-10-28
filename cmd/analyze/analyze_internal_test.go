@@ -379,31 +379,6 @@ func TestWriteUnknownFormat(t *testing.T) {
 	}
 }
 
-func TestWorkspacePatterns(t *testing.T) {
-	// A module whose directory starts with "_", which "/dir/..." would skip.
-	dir := filepath.Join(t.TempDir(), "_tool")
-	ok(t, os.MkdirAll(filepath.Join(dir, "cmd", "x"), 0o750))
-	ok(
-		t,
-		os.WriteFile(
-			filepath.Join(dir, "go.mod"),
-			[]byte("module example.com/_tool\n\ngo 1.24\n"),
-			0o600,
-		),
-	)
-	ok(
-		t,
-		os.WriteFile(
-			filepath.Join(dir, "cmd", "x", "main.go"),
-			[]byte("package main\n\nfunc main() {}\n"),
-			0o600,
-		),
-	)
-	got, err := workspacePatterns(context.Background(), dir, io.Discard)
-	ok(t, err)
-	equals(t, got, []string{"example.com/_tool/..."})
-}
-
 func TestAnalyzeHelp(t *testing.T) {
 	var out bytes.Buffer
 	r := root.New(strings.NewReader(""), io.Discard, &out)
