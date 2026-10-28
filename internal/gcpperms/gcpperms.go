@@ -96,11 +96,11 @@ type Config struct {
 	// Parallelism is how many binaries are analyzed at once. Zero or less
 	// means DefaultParallelism.
 	Parallelism int
-	// Wrappers name functions, as "importpath.Func", that call the
-	// functions passed to them in a way VTA cannot follow, such as by
-	// reflection. A call to one counts as calling each function passed to
-	// it. RTA needs none.
-	Wrappers []string
+	// Wrappers are functions that call the functions passed to them in a
+	// way VTA cannot follow, such as by reflection; FindWrappers finds
+	// them. Under VTA a call to one counts as calling each function passed
+	// in its Params. RTA needs none.
+	Wrappers []Wrapper
 }
 
 // analyzer finds the SDK calls of binaries in one built program.
@@ -109,7 +109,7 @@ type analyzer struct {
 	firstParty map[string]bool
 	root       string
 	algo       Algorithm
-	wrappers   []string
+	wrappers   []Wrapper
 }
 
 // sdkPrefixes identifies Google Cloud client libraries by import path.
@@ -450,9 +450,15 @@ func (a analyzer) site(pos token.Pos, fn *ssa.Function) Site {
 	if !pos.IsValid() {
 		pos = fn.Pos()
 	}
-	p := a.prog.Fset.Position(pos)
+	return site(a.prog.Fset, pos, a.root)
+}
+
+// site is the position pos, with its file relative to root when it is
+// under root.
+func site(fset *token.FileSet, pos token.Pos, root string) Site {
+	p := fset.Position(pos)
 	file := p.Filename
-	if rel, err := filepath.Rel(a.root, file); err == nil && !strings.HasPrefix(rel, "..") {
+	if rel, err := filepath.Rel(root, file); err == nil && !strings.HasPrefix(rel, "..") {
 		file = rel
 	}
 	return Site{File: file, Line: p.Line}

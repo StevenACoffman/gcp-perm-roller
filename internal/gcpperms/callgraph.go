@@ -47,14 +47,14 @@ func ParseAlgorithm(s string) (Algorithm, error) {
 // and its call graph is VTA's initial graph. VTA only removes edges from
 // the initial graph, so its result is never less precise than RTA's.
 //
-// wrappers name functions ("importpath.Func") that call their function
-// arguments in a way VTA cannot follow, such as by reflection. Each call
-// to one gains an edge from the caller to every function passed to it.
-// RTA already assumes such calls, so wrappers matter only to VTA.
+// wrappers are functions that call their function arguments in a way VTA
+// cannot follow, such as by reflection. Each call to one gains an edge from
+// the caller to every function passed in the wrapper's Params. RTA already
+// assumes such calls, so wrappers matter only to VTA.
 func buildCallGraph(
 	roots []*ssa.Function,
 	algo Algorithm,
-	wrappers []string,
+	wrappers []Wrapper,
 ) (*callgraph.Graph, map[*ssa.Function]bool) {
 	res := rta.Analyze(roots, true)
 	funcs := make(map[*ssa.Function]bool, len(res.Reachable))
@@ -70,26 +70,45 @@ func buildCallGraph(
 }
 
 // addWrapperEdges adds to g, for each call in funcs to one of wrappers, an
-// edge from the caller to each function value passed as an argument.
-func addWrapperEdges(g *callgraph.Graph, funcs map[*ssa.Function]bool, wrappers []string) {
+// edge from the caller to each function value passed in the wrapper's
+// Params, or in any argument when it lists none.
+func addWrapperEdges(g *callgraph.Graph, funcs map[*ssa.Function]bool, wrappers []Wrapper) {
+	byName := make(map[string]*Wrapper, len(wrappers))
+	for i := range wrappers {
+		byName[wrappers[i].Function] = &wrappers[i]
+	}
 	for fn := range funcs {
-		for _, site := range wrapperCalls(fn, wrappers) {
-			for _, arg := range site.Common().Args {
-				if callee := funcValue(arg); callee != nil {
-					callgraph.AddEdge(g.CreateNode(fn), site, g.CreateNode(callee))
-				}
+		for _, site := range wrapperCalls(fn, byName) {
+			w := byName[wrapperKey(site.Common().StaticCallee())]
+			for _, callee := range passedFuncs(site, w) {
+				callgraph.AddEdge(g.CreateNode(fn), site, g.CreateNode(callee))
 			}
 		}
 	}
 }
 
-// wrapperCalls returns fn's calls to one of wrappers.
-func wrapperCalls(fn *ssa.Function, wrappers []string) []ssa.CallInstruction {
+// passedFuncs returns the functions site passes to the wrapper w in its
+// Params, or in any argument when it lists none.
+func passedFuncs(site ssa.CallInstruction, w *Wrapper) []*ssa.Function {
+	var out []*ssa.Function
+	for i, arg := range site.Common().Args {
+		if len(w.Params) > 0 && !slices.Contains(w.Params, i) {
+			continue
+		}
+		if callee := funcValue(arg); callee != nil {
+			out = append(out, callee)
+		}
+	}
+	return out
+}
+
+// wrapperCalls returns fn's calls to one of the wrappers in byName.
+func wrapperCalls(fn *ssa.Function, byName map[string]*Wrapper) []ssa.CallInstruction {
 	var out []ssa.CallInstruction
 	for _, b := range fn.Blocks {
 		for _, instr := range b.Instrs {
 			if site, ok := instr.(ssa.CallInstruction); ok &&
-				isWrapper(site.Common().StaticCallee(), wrappers) {
+				byName[wrapperKey(site.Common().StaticCallee())] != nil {
 				out = append(out, site)
 			}
 		}
@@ -97,19 +116,20 @@ func wrapperCalls(fn *ssa.Function, wrappers []string) []ssa.CallInstruction {
 	return out
 }
 
-// isWrapper reports whether fn, or the generic function it instantiates,
-// is one of wrappers.
-func isWrapper(fn *ssa.Function, wrappers []string) bool {
+// wrapperKey is the name a wrapper would be listed under for fn: its
+// "importpath.Func", or that of the generic function it instantiates. A
+// method, a synthetic function, or nil has none, and is never a wrapper.
+func wrapperKey(fn *ssa.Function) string {
 	if fn == nil {
-		return false
+		return ""
 	}
 	if o := fn.Origin(); o != nil {
 		fn = o
 	}
 	if fn.Pkg == nil || fn.Signature.Recv() != nil {
-		return false
+		return ""
 	}
-	return slices.Contains(wrappers, fn.Pkg.Pkg.Path()+"."+fn.Name())
+	return fn.Pkg.Pkg.Path() + "." + fn.Name()
 }
 
 // funcValue returns the function a value passed as an argument refers to:

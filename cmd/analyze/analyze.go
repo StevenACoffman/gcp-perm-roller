@@ -181,7 +181,7 @@ func (cfg *Config) analyze(ctx context.Context, patterns []string) (gcpperms.Res
 		Algorithm:   algorithm,
 		Parallelism: cfg.Jobs,
 		Tags:        cfg.Tags,
-		Wrappers:    cfg.Wrappers,
+		Wrappers:    cfg.wrappers(),
 	})
 	if err != nil {
 		return gcpperms.Result{}, fmt.Errorf("analyze: %w", err)
@@ -196,6 +196,16 @@ func (cfg *Config) analyze(ctx context.Context, patterns []string) (gcpperms.Res
 			strings.Join(patterns, " "), cfg.Dir)
 	}
 	return res, nil
+}
+
+// wrappers returns the wrappers --wrapper names, each calling every
+// function passed to it.
+func (cfg *Config) wrappers() []gcpperms.Wrapper {
+	var out []gcpperms.Wrapper
+	for _, w := range cfg.Wrappers {
+		out = append(out, gcpperms.Wrapper{Function: w})
+	}
+	return out
 }
 
 // loadResults reads and concatenates results saved with --format=json.

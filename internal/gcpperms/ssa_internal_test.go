@@ -107,7 +107,7 @@ func main() { _ = cachedFetch() }
 `
 
 // fakeConv converts functions and methods in ways funcValue must see
-// through, and has a method named like a function, which isWrapper must not
+// through, and has a method named like a function, which wrapperKey must not
 // confuse with it.
 const fakeConv = `package conv
 
@@ -373,7 +373,7 @@ func TestBinaryWrappers(t *testing.T) {
 	const p = "cloud.google.com/go/fake."
 	tests := map[string]struct {
 		algo     Algorithm
-		wrappers []string
+		wrappers []Wrapper
 		want     []string
 	}{
 		// spec: VTA does not follow cache's reflective call, so it misses
@@ -383,12 +383,24 @@ func TestBinaryWrappers(t *testing.T) {
 		// count as called.
 		"VTA with the wrapper named": {
 			algo:     VTA,
-			wrappers: []string{"example.com/cached.cache"},
+			wrappers: []Wrapper{{Function: "example.com/cached.cache"}},
 			want:     []string{p + "Client.Get", p + "New"},
 		},
-		"another function named does nothing": {
+		"VTA with the wrapper's parameter": {
 			algo:     VTA,
-			wrappers: []string{"example.com/cached.fetch", "example.com/other.cache"},
+			wrappers: []Wrapper{{Function: "example.com/cached.cache", Params: []int{0}}},
+			want:     []string{p + "Client.Get", p + "New"},
+		},
+		// spec: only the listed parameters' functions count as called.
+		"VTA with another parameter": {
+			algo:     VTA,
+			wrappers: []Wrapper{{Function: "example.com/cached.cache", Params: []int{1}}},
+		},
+		"another function named does nothing": {
+			algo: VTA,
+			wrappers: []Wrapper{
+				{Function: "example.com/cached.fetch"}, {Function: "example.com/other.cache"},
+			},
 		},
 		// spec: RTA already assumes address-taken functions are called.
 		"RTA needs no wrappers": {algo: RTA, want: []string{p + "Client.Get", p + "New"}},
@@ -410,7 +422,7 @@ func TestBinaryWrappers(t *testing.T) {
 	}
 }
 
-func TestIsWrapper(t *testing.T) {
+func TestWrapperKey(t *testing.T) {
 	// fakeApp instantiates fake.Generic.
 	prog, pkgs := buildSSA(t,
 		[2]string{"cloud.google.com/go/fake", fakeSDK},
@@ -418,7 +430,6 @@ func TestIsWrapper(t *testing.T) {
 		[2]string{"example.com/conv", fakeConv},
 	)
 	sdk, conv := pkgs[0], pkgs[2]
-	wrappers := []string{"example.com/conv.cache", "cloud.google.com/go/fake.Generic"}
 	var generic *ssa.Function
 	for fn := range ssautil.AllFunctions(prog) {
 		if fn.Origin() == sdk.Func("Generic") {
@@ -431,25 +442,26 @@ func TestIsWrapper(t *testing.T) {
 	method := prog.FuncValue(lookupMethod(t, conv, "T", "cache"))
 	tests := map[string]struct {
 		fn   *ssa.Function
-		want bool
+		want string
 	}{
-		"a named function":                  {fn: conv.Func("cache"), want: true},
-		"an instance of a generic function": {fn: generic, want: true},
+		"a named function": {fn: conv.Func("cache"), want: "example.com/conv.cache"},
+		"an instance of a generic function": {
+			fn: generic, want: "cloud.google.com/go/fake.Generic",
+		},
 		// spec: a method is never a wrapper, even one named like it.
 		"a method with the wrapper's name": {fn: method},
-		"another function":                 {fn: conv.Func("g")},
 		"no function":                      {},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			equals(t, isWrapper(tc.fn, wrappers), tc.want)
+			equals(t, wrapperKey(tc.fn), tc.want)
 		})
 	}
 	// spec: a synthetic function, which belongs to no package, is no wrapper
 	// and does not stop the search.
 	for fn := range ssautil.AllFunctions(prog) {
 		if fn.Pkg == nil && fn.Origin() == nil {
-			equals(t, isWrapper(fn, wrappers), false)
+			equals(t, wrapperKey(fn), "")
 			return
 		}
 	}

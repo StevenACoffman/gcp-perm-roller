@@ -158,7 +158,7 @@ func TestAnalyzeWrappers(t *testing.T) {
 	res, err := Analyze(&Config{
 		Dir:      ".",
 		Patterns: []string{"./testdata/cached"},
-		Wrappers: []string{fixture + ".cache"},
+		Wrappers: []Wrapper{{Function: fixture + ".cache", Params: []int{0}}},
 	})
 	ok(t, err)
 	equals(t, len(res.Binaries), 1)
@@ -168,6 +168,119 @@ func TestAnalyzeWrappers(t *testing.T) {
 	}
 	// spec: naming the wrapper makes the call behind it visible to VTA.
 	equals(t, apis, []string{"cloud.google.com/go/datastore.Client.Get"})
+}
+
+func TestFindWrappers(t *testing.T) {
+	const pkg = "github.com/StevenACoffman/gcp-perm-roller/internal/gcpperms/testdata/wrappers"
+	got, err := FindWrappers(&Config{Dir: ".", Patterns: []string{"./testdata/wrappers"}})
+	ok(t, err)
+	type found struct {
+		function string
+		params   []int
+		calls    int
+		reason   string
+	}
+	var summary []found
+	for _, w := range got {
+		equals(t, w.Site.File, "testdata/wrappers/wrappers.go")
+		summary = append(summary, found{w.Function, w.Params, w.Calls, w.Reason})
+	}
+	// spec: functions that pass a parameter to reflect.ValueOf and call by
+	// reflection, in their body or a closure, with the parameters they call
+	// and the calls to them; not methods, nor functions that only inspect
+	// the parameter or call something else.
+	equals(t, summary, []found{
+		{
+			pkg + ".Both",
+			[]int{0, 1},
+			1,
+			"passes parameter 0, 1 to reflect.ValueOf and calls it with reflect.Value.Call",
+		},
+		{
+			pkg + ".Cache",
+			[]int{0},
+			2,
+			"passes parameter 0 to reflect.ValueOf and calls it with reflect.Value.Call, " +
+				"in a function built with reflect.MakeFunc",
+		},
+		{
+			pkg + ".Call",
+			[]int{0},
+			1,
+			"passes parameter 0 to reflect.ValueOf and calls it with reflect.Value.Call",
+		},
+		{
+			pkg + ".Chain",
+			[]int{0},
+			1,
+			"passes parameter 0 to reflect.ValueOf and calls it through layer",
+		},
+		{
+			pkg + ".Later",
+			[]int{0},
+			1,
+			"passes parameter 0 to reflect.ValueOf and calls it with reflect.Value.Call",
+		},
+		{
+			pkg + ".Memo",
+			[]int{0},
+			1,
+			"passes parameter 0 to reflect.ValueOf and calls it through wrap",
+		},
+		{
+			pkg + ".Spread",
+			[]int{1},
+			0,
+			"passes parameter 1 to reflect.ValueOf and calls it with reflect.Value.CallSlice",
+		},
+	})
+}
+
+func TestFindWrappersLoadError(t *testing.T) {
+	if _, err := FindWrappers(
+		&Config{Dir: "testdata/nope", Patterns: []string{"./..."}},
+	); err == nil {
+		t.Fatal("found wrappers in a missing directory")
+	}
+}
+
+func TestWrapperFiles(t *testing.T) {
+	want := []Wrapper{
+		{
+			Function: "example.com/a.Cache", Params: []int{0}, Calls: 3, Reason: "why",
+			Site: &Site{File: "a/cache.go", Line: 9},
+		},
+		{Function: "example.com/b.Run"},
+	}
+	var buf bytes.Buffer
+	ok(t, WriteWrappers(&buf, want))
+	file := filepath.Join(t.TempDir(), "wrappers.json")
+	ok(t, os.WriteFile(file, buf.Bytes(), 0o600))
+	got, err := LoadWrappers(file)
+	ok(t, err)
+	// spec: wrappers round-trip through a file.
+	equals(t, got, want)
+
+	// spec: no wrappers is an empty list, not null.
+	buf.Reset()
+	ok(t, WriteWrappers(&buf, nil))
+	equals(t, buf.String(), "{\n  \"wrappers\": []\n}\n")
+
+	for name, body := range map[string]string{
+		"not JSON":          "{",
+		"a wrapper unnamed": `{"wrappers": [{"params": [0]}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := filepath.Join(t.TempDir(), "bad.json")
+			ok(t, os.WriteFile(bad, []byte(body), 0o600))
+			if _, err := LoadWrappers(bad); err == nil {
+				t.Fatal("loaded a bad file")
+			}
+		})
+	}
+	if _, err := LoadWrappers(filepath.Join(t.TempDir(), "nope.json")); err == nil {
+		t.Fatal("loaded a missing file")
+	}
 }
 
 func TestAnalyze(t *testing.T) {
