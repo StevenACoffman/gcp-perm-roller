@@ -45,10 +45,14 @@ func TestRoleFilterAllows(t *testing.T) {
 		"deleted": {
 			r: Role{Name: "roles/x.y", Stage: "GA", Deleted: true},
 		},
-		"owner":                 {r: role("roles/owner")},
-		"editor":                {r: role("roles/editor")},
-		"viewer":                {r: role("roles/viewer")},
-		"browser":               {r: role("roles/browser")},
+		"owner":   {r: role("roles/owner")},
+		"editor":  {r: role("roles/editor")},
+		"viewer":  {r: role("roles/viewer")},
+		"browser": {r: role("roles/browser")},
+		// spec: roles of no one service are as broad as the basic roles.
+		"admin":                 {r: role("roles/admin")},
+		"writer":                {r: role("roles/writer")},
+		"reader":                {r: role("roles/reader")},
 		"service agent by name": {r: role("roles/dataflow.serviceAgent")},
 		"service agent by title": {
 			r: Role{Name: "roles/x.agent", Title: "X Service Agent", Stage: "GA"},
@@ -57,6 +61,9 @@ func TestRoleFilterAllows(t *testing.T) {
 		"system":                 {r: role("roles/firebaserules.system")},
 		"nested system":          {r: role("roles/x.internal.system")},
 		"similar names are fine": {r: role("roles/x.systemAdmin"), want: true},
+		// spec: a custom role is never recommended, even a GA one.
+		"project custom role":      {r: role("projects/p/roles/CustomRole1")},
+		"organization custom role": {r: role("organizations/1/roles/x")},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

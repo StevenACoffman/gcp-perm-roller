@@ -94,7 +94,9 @@ How roles are chosen:
 
 1. **Some roles are never recommended:**
 
-   - basic roles (`owner`, `editor`, `viewer`, `browser`);
+   - custom roles, which belong to one project or organization;
+   - roles of no one service: the basic roles (`owner`, `editor`, `viewer`, `browser`) and
+     `admin`, `writer`, and `reader`, which grant access across every service;
    - service agent and `system` roles, which Google grants to its own service accounts;
    - `legacy` roles, kept for ACL compatibility;
    - deprecated and deleted roles.

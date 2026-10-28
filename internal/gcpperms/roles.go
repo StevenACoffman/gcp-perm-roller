@@ -165,24 +165,25 @@ func readJSONFile(file string, v any) error {
 	return errors.Wrapf(json.Unmarshal(data, v), "parsing %s", file)
 }
 
-// isBasicRole reports whether name is a basic role. Basic roles grant
-// broad access across every service, the opposite of least privilege.
-func isBasicRole(name string) bool {
-	switch name {
-	case "roles/owner", "roles/editor", "roles/viewer", "roles/browser":
-		return true
-	default:
-		return false
-	}
+// spansAllServices reports whether name is a role of no one service, such
+// as the basic roles (roles/owner, editor, viewer, browser) and roles/admin,
+// writer, and reader. Each grants broad access across every service, the
+// opposite of least privilege; their names have no service part.
+func spansAllServices(name string) bool {
+	return !strings.Contains(strings.TrimPrefix(name, "roles/"), ".")
 }
 
-// allows reports whether r may be recommended. Never recommended are basic
-// roles; service agent and system roles, which Google grants to its own
-// service accounts; and legacy roles, kept for compatibility with ACLs.
+// allows reports whether r may be recommended. Never recommended are custom
+// roles, which belong to one project or organization; roles spanning all
+// services, such as the basic roles; service agent and system roles, which
+// Google grants to its own service accounts; and legacy roles, kept for
+// compatibility with ACLs.
 func (f RoleFilter) allows(r *Role) bool {
 	_, short, _ := strings.Cut(r.Name, ".")
 	switch {
-	case r.Deleted, isBasicRole(r.Name), r.Stage == "DEPRECATED":
+	case !strings.HasPrefix(r.Name, "roles/"):
+		return false
+	case r.Deleted, spansAllServices(r.Name), r.Stage == "DEPRECATED":
 		return false
 	case strings.HasSuffix(strings.ToLower(r.Name), "serviceagent") || strings.Contains(r.Title, "Service Agent"):
 		return false
