@@ -1,0 +1,25 @@
+bindings:
+- members:
+  - user:ada@example.com
+  - group:eng@example.com
+  role: roles/datastore.user
+- members:
+  - user:ada@example.com
+  role: projects/demo/roles/CustomRole1
+- condition:
+    expression: request.time < timestamp("2000-01-01T00:00:00Z")
+    title: Expired long ago
+  members:
+  - user:ada@example.com
+  role: roles/pubsub.publisher
+- condition:
+    expression: resource.name.startsWith("projects/_/buckets/logs")
+    title: Logs bucket only
+  members:
+  - user:ada@example.com
+  role: roles/storage.objectViewer
+- members:
+  - user:bob@example.com
+  role: projects/demo/roles/Undefined
+etag: BwZe6DcM2eM=
+version: 3

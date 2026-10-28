@@ -18,6 +18,7 @@ import (
 	"github.com/peterbourgon/ff/v4/ffhelp"
 
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/analyze"
+	"github.com/StevenACoffman/gcp-perm-roller/cmd/importpolicy"
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/root"
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/verifytable"
 	"github.com/StevenACoffman/gcp-perm-roller/cmd/version"
@@ -42,9 +43,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	analyze.New(r)
 	verifytable.New(r)
 	version.New(r)
-	// register new commands here
-
 	wrappers.New(r)
+	importpolicy.New(r)
+	// register new commands here
 	if err := r.Command.Parse(args, ff.WithEnvVarPrefix("GCP_PERM_ROLLER")); err != nil {
 		// --help asked for help, and any other parse failure (an unknown flag,
 		// a bad flag value) is the command line's fault, so both show it.

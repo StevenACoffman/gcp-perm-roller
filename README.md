@@ -137,6 +137,61 @@ A role chosen this way can still be one meant for a Google service. For
 `roles/storage.bucketViewer` (2 permissions), is BETA; add `--role-stages=GA --role-stages=BETA` to have it chosen. The only other GA, non-legacy Storage role holding
 the permission is `roles/storage.admin`, with 113.
 
+## Importing a Policy
+
+`gcp-perm-roller import` reads a project's IAM allow policy, as `gcloud` exports it, and
+finds the smallest set of predefined roles that grants every permission one member holds
+there. It chooses roles the same way as [Predefined Roles](#predefined-roles).
+
+```sh
+gcloud projects get-iam-policy my-project > policy.yaml   # or --format=json
+gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
+  --roles ~/src/iam-dataset/gcp/roles
+```
+
+```text
+== user:ada@example.com
+  Holds:
+    roles/datastore.user
+    projects/demo/roles/CustomRole1
+    roles/pubsub.publisher                        expired: Expired long ago
+    roles/storage.objectViewer                    conditional: Logs bucket only
+  3 permissions, and 2 more under conditions
+  Predefined roles (1 permissions beyond those required):
+    roles/datastore.user                          Cloud Datastore User, 2 permissions
+      for datastore.entities.get, datastore.entities.list
+    roles/pubsub.viewer                           Pub/Sub Viewer, 2 permissions
+      for pubsub.topics.get
+```
+
+| Flag                    | Meaning                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `--policy`              | The exported policy, YAML or JSON (required)                                   |
+| `--member`              | The member, as the policy writes it (`user:…`), or a bare email (required)     |
+| `--format`              | `text` (default) or `json`                                                     |
+| `--roles`               | Where to read predefined roles: `api` (default) or saved JSON                  |
+| `--custom-roles`        | Where to read the custom roles the member holds: `api` (default) or saved JSON |
+| `--role-stages`         | A launch stage to recommend; repeatable (default `GA`)                         |
+| `--include-conditional` | Also cover the permissions held under conditions                               |
+
+How bindings count:
+
+- A binding whose condition only sets an expiry,
+  `request.time < timestamp("…")` as the Cloud Console's temporary access writes it,
+  counts until the expiry; after it, the report marks it expired.
+- The report lists permissions under any other condition, and covers them only with
+  `--include-conditional`.
+- Custom roles (`projects/…/roles/…`, `organizations/…/roles/…`) are got from the IAM
+  API, which needs `iam.roles.get` on their project or organization, or
+  `--custom-roles` reads them from saved `gcloud iam roles describe --format=json` files.
+  A custom role with no definition stops the import, so its permissions are never left out
+  silently.
+
+The result matches what the member holds now, not what it needs. The policy does not
+list a group's members, so a user's grants through groups are not counted; name the
+group instead. Grants inherited from the folder and organization are not in a project's
+policy (`gcloud projects get-ancestors-iam-policy` lists them).
+
 ## How It Works
 
 1. Loads the packages and builds SSA for the whole program, dependencies included.

@@ -1,0 +1,2 @@
+{"name": "projects/demo/roles/CustomRole1", "title": "Reader", "stage": "GA",
+ "includedPermissions": ["datastore.entities.get", "pubsub.topics.get"]}
