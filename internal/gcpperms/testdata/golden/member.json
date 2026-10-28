@@ -1,0 +1,81 @@
+{
+  "member": "user:ada@example.com",
+  "bindings": [
+    {
+      "role": "roles/datastore.user",
+      "state": "unconditional"
+    },
+    {
+      "role": "projects/demo/roles/CustomRole1",
+      "state": "unconditional"
+    },
+    {
+      "role": "roles/pubsub.publisher",
+      "condition": {
+        "title": "Temp access 90 days",
+        "description": "Assigned 4.1.2026",
+        "expression": "request.time < timestamp(\"2026-07-01T07:00:00.000Z\")"
+      },
+      "state": "expired"
+    },
+    {
+      "role": "roles/secretmanager.secretAccessor",
+      "condition": {
+        "title": "Temp access, far future",
+        "expression": "request.time < timestamp(\"2999-01-01T00:00:00Z\")"
+      },
+      "state": "unconditional"
+    },
+    {
+      "role": "roles/storage.objectViewer",
+      "condition": {
+        "title": "Logs bucket only",
+        "expression": "resource.name.startsWith(\"projects/_/buckets/logs\")"
+      },
+      "state": "conditional"
+    }
+  ],
+  "permissions": [
+    "datastore.entities.get",
+    "datastore.entities.list",
+    "pubsub.topics.get",
+    "secretmanager.versions.access"
+  ],
+  "conditionalPermissions": [
+    "storage.objects.get",
+    "storage.objects.list"
+  ],
+  "predefinedRoles": {
+    "grants": [
+      {
+        "role": "roles/datastore.user",
+        "title": "Cloud Datastore User",
+        "stage": "GA",
+        "size": 2,
+        "covers": [
+          "datastore.entities.get",
+          "datastore.entities.list"
+        ]
+      },
+      {
+        "role": "roles/pubsub.viewer",
+        "title": "Pub/Sub Viewer",
+        "stage": "GA",
+        "size": 2,
+        "covers": [
+          "pubsub.topics.get"
+        ]
+      },
+      {
+        "role": "roles/secretmanager.secretAccessor",
+        "title": "Secret Accessor",
+        "stage": "GA",
+        "size": 1,
+        "covers": [
+          "secretmanager.versions.access"
+        ]
+      }
+    ],
+    "excess": 1
+  }
+}

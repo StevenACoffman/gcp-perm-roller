@@ -37,11 +37,15 @@ func WriteText(w io.Writer, bins []Binary, verbose bool) error {
 	return ew.err
 }
 
-// WriteJSON writes the result as indented JSON.
-func WriteJSON(w io.Writer, r Result) error {
+// WriteJSON writes v, such as a Result or a MemberAccess, as indented
+// JSON.
+func WriteJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return errors.Wrap(enc.Encode(r), "gcpperms.WriteJSON")
+	// Condition expressions compare with < and >, which HTML escaping
+	// would make unreadable.
+	enc.SetEscapeHTML(false)
+	return errors.Wrap(enc.Encode(v), "gcpperms.WriteJSON")
 }
 
 // WriteRoles writes one IAM custom role definition per binary, in the YAML
@@ -93,6 +97,29 @@ func WritePredefinedRoles(w io.Writer, bins []Binary) error {
 		ew.printf("== %s\n", b.Package)
 		writeSelection(ew, b.PredefinedRoles)
 	}
+	return ew.err
+}
+
+// WriteMemberAccess writes the roles a member holds, how many permissions
+// they grant, and the predefined roles that grant those, from
+// a.PredefinedRoles.
+func WriteMemberAccess(w io.Writer, a *MemberAccess) error {
+	ew := &errWriter{w: w}
+	ew.printf("== %s\n", a.Member)
+	ew.printf("  Holds:\n")
+	for _, b := range a.Bindings {
+		if note := bindingNote(b); note != "" {
+			ew.printf("    %-45s %s\n", b.Role, note)
+		} else {
+			ew.printf("    %s\n", b.Role)
+		}
+	}
+	ew.printf("  %d permissions", len(a.Permissions))
+	if n := len(a.ConditionalPermissions); n > 0 {
+		ew.printf(", and %d more under conditions", n)
+	}
+	ew.printf("\n")
+	writeSelection(ew, a.PredefinedRoles)
 	return ew.err
 }
 
@@ -196,6 +223,26 @@ func writeSelection(ew *errWriter, sel *RoleSelection) {
 	if sel.Inexact {
 		ew.printf("  Some roles were chosen greedily; a smaller set may exist.\n")
 	}
+}
+
+// bindingNote says when a held binding applies, naming its condition.
+func bindingNote(b HeldBinding) string {
+	if b.Condition == nil {
+		return ""
+	}
+	name := b.Condition.Title
+	if name == "" {
+		name = b.Condition.Expression
+	}
+	switch b.State {
+	case Unconditional:
+		return "temporary: " + name
+	case Expired:
+		return "expired: " + name
+	case Conditional:
+		return "conditional: " + name
+	}
+	return string(b.State) + ": " + name
 }
 
 // shortAPI trims the import path to its last unversioned element:

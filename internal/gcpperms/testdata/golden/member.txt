@@ -1,0 +1,15 @@
+== user:ada@example.com
+  Holds:
+    roles/datastore.user
+    projects/demo/roles/CustomRole1
+    roles/pubsub.publisher                        expired: Temp access 90 days
+    roles/secretmanager.secretAccessor            temporary: Temp access, far future
+    roles/storage.objectViewer                    conditional: Logs bucket only
+  4 permissions, and 2 more under conditions
+  Predefined roles (1 permissions beyond those required):
+    roles/datastore.user                          Cloud Datastore User, 2 permissions
+      for datastore.entities.get, datastore.entities.list
+    roles/pubsub.viewer                           Pub/Sub Viewer, 2 permissions
+      for pubsub.topics.get
+    roles/secretmanager.secretAccessor            Secret Accessor, 1 permissions
+      for secretmanager.versions.access

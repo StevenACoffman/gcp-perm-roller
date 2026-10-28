@@ -1,0 +1,67 @@
+{
+  "auditConfigs": [
+    {
+      "auditLogConfigs": [
+        {
+          "logType": "DATA_READ"
+        }
+      ],
+      "service": "secretmanager.googleapis.com"
+    }
+  ],
+  "bindings": [
+    {
+      "members": [
+        "user:ada@example.com",
+        "group:eng@example.com"
+      ],
+      "role": "roles/datastore.user"
+    },
+    {
+      "members": [
+        "user:ada@example.com"
+      ],
+      "role": "projects/demo/roles/CustomRole1"
+    },
+    {
+      "condition": {
+        "description": "Assigned 4.1.2026",
+        "expression": "request.time < timestamp(\"2026-07-01T07:00:00.000Z\")",
+        "title": "Temp access 90 days"
+      },
+      "members": [
+        "user:ada@example.com"
+      ],
+      "role": "roles/pubsub.publisher"
+    },
+    {
+      "condition": {
+        "expression": "request.time < timestamp(\"2999-01-01T00:00:00Z\")",
+        "title": "Temp access, far future"
+      },
+      "members": [
+        "user:ada@example.com"
+      ],
+      "role": "roles/secretmanager.secretAccessor"
+    },
+    {
+      "condition": {
+        "expression": "resource.name.startsWith(\"projects/_/buckets/logs\")",
+        "title": "Logs bucket only"
+      },
+      "members": [
+        "user:ada@example.com"
+      ],
+      "role": "roles/storage.objectViewer"
+    },
+    {
+      "members": [
+        "deleted:user:ada@example.com?uid=123",
+        "serviceAccount:app@demo.iam.gserviceaccount.com"
+      ],
+      "role": "roles/owner"
+    }
+  ],
+  "etag": "BwZe6DcM2eM=",
+  "version": 3
+}

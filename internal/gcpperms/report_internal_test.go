@@ -94,6 +94,49 @@ func goldenBinaries() []Binary {
 	}
 }
 
+// goldenMemberAccess is what user:ada@example.com holds in the fixture
+// policy, with the predefined roles that grant it.
+func goldenMemberAccess(t *testing.T) *MemberAccess {
+	t.Helper()
+	roles := []Role{
+		{
+			Name: "roles/datastore.user", Title: "Cloud Datastore User", Stage: "GA",
+			Permissions: []string{"datastore.entities.get", "datastore.entities.list"},
+		},
+		{
+			Name: "roles/datastore.viewer", Title: "Cloud Datastore Viewer", Stage: "GA",
+			Permissions: []string{"datastore.entities.get"},
+		},
+		{
+			Name: "projects/demo/roles/CustomRole1", Title: "Reader", Stage: "GA",
+			Permissions: []string{"datastore.entities.get", "pubsub.topics.get"},
+		},
+		{
+			Name: "roles/pubsub.viewer", Title: "Pub/Sub Viewer", Stage: "GA",
+			Permissions: []string{"pubsub.topics.get", "pubsub.topics.list"},
+		},
+		{
+			Name: "roles/pubsub.publisher", Title: "Pub/Sub Publisher", Stage: "GA",
+			Permissions: []string{"pubsub.topics.publish"},
+		},
+		{
+			Name: "roles/secretmanager.secretAccessor", Title: "Secret Accessor", Stage: "GA",
+			Permissions: []string{"secretmanager.versions.access"},
+		},
+		{
+			Name: "roles/storage.objectViewer", Title: "Storage Object Viewer", Stage: "GA",
+			Permissions: []string{"storage.objects.get", "storage.objects.list"},
+		},
+	}
+	const member = "user:ada@example.com"
+	access, missing := NewMemberAccess(
+		member, readPolicy(t, "policy.yaml").MemberBindings(member, policyNow), roles)
+	equals(t, len(missing), 0)
+	sel := SelectRoles(access.Permissions, roles, RoleFilter{})
+	access.PredefinedRoles = &sel
+	return &access
+}
+
 // TestReportsMatchGolden pins the exact report layouts. Update the files
 // in testdata/golden deliberately when a layout changes.
 func TestReportsMatchGolden(t *testing.T) {
@@ -109,6 +152,12 @@ func TestReportsMatchGolden(t *testing.T) {
 		}},
 		"roles": {golden: "roles.yaml", write: func(w io.Writer) error {
 			return WriteRoles(w, goldenBinaries())
+		}},
+		"member": {golden: "member.txt", write: func(w io.Writer) error {
+			return WriteMemberAccess(w, goldenMemberAccess(t))
+		}},
+		"member, json": {golden: "member.json", write: func(w io.Writer) error {
+			return WriteJSON(w, goldenMemberAccess(t))
 		}},
 		"json": {golden: "result.json", write: func(w io.Writer) error {
 			return WriteJSON(
@@ -150,6 +199,9 @@ func TestWritersStopAtTheFirstError(t *testing.T) {
 	writers := map[string]func(io.Writer) error{
 		"text":  func(w io.Writer) error { return WriteText(w, goldenBinaries(), true) },
 		"roles": func(w io.Writer) error { return WriteRoles(w, goldenBinaries()) },
+		"member": func(w io.Writer) error {
+			return WriteMemberAccess(w, goldenMemberAccess(t))
+		},
 	}
 	for name, write := range writers {
 		t.Run(name, func(t *testing.T) {
