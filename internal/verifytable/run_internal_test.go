@@ -128,6 +128,18 @@ func TestRunStrict(t *testing.T) {
 	}
 }
 
+func TestRunCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// spec: a cancelled run stops before loading the workspace, and says
+	// why.
+	if err := Run(ctx, fixtureOptions(t), io.Discard, io.Discard); !errors.Is(
+		err, context.Canceled,
+	) {
+		t.Fatalf("got %v, want context.Canceled", err)
+	}
+}
+
 func TestRunErrors(t *testing.T) {
 	tests := map[string]func(*Options){
 		"a missing table": func(o *Options) { o.Table = "testdata/nope.go" },

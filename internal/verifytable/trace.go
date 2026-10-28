@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"os/exec"
 	"regexp"
 	"slices"
 	"sort"
@@ -24,6 +23,8 @@ import (
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
+
+	"github.com/StevenACoffman/gcp-perm-roller/internal/workspace"
 )
 
 var (
@@ -94,22 +95,27 @@ func isSDK(path string) bool {
 // one RTA-seeded VTA call graph rooted at every main and init.
 func loadProgram(
 	ctx context.Context,
-	workspace string,
+	dir string,
 	patterns []string,
 	algo string,
 	stderr io.Writer,
 ) (*program, error) {
 	if len(patterns) == 0 {
 		var err error
-		if patterns, err = modulePatterns(ctx, workspace, stderr); err != nil {
-			return nil, err
+		if patterns, err = workspace.Patterns(ctx, dir, stderr); err != nil {
+			return nil, fmt.Errorf("finding the modules: %w", err)
 		}
 	}
 	pkgs, err := packages.Load(&packages.Config{
 		Context: ctx,
 		Mode:    packages.LoadAllSyntax | packages.NeedModule,
-		Dir:     workspace,
+		Dir:     dir,
 	}, patterns...)
+	// go/packages reports a go list it had to stop only as text, which
+	// errors.Is cannot match, so a done ctx is the cause.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, fmt.Errorf("loading the workspace: %w", ctxErr)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("loading the workspace: %w", err)
 	}
@@ -117,29 +123,16 @@ func loadProgram(
 	mains := p.mainPackages(pkgs, stderr)
 	prog, ssaPkgs := ssautil.AllPackages(mains, ssa.InstantiateGenerics)
 	prog.Build()
+	// The call graph of every binary at once cannot be interrupted, so do
+	// not start it once cancelled.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("building the program: %w", err)
+	}
 	p.prog = prog
 	p.graph = callGraph(ssaPkgs, algo)
 	p.descriptors = loadDescriptors(prog)
 	addSyntaxDescriptors(p.descriptors, pkgs)
 	return p, nil
-}
-
-// modulePatterns returns "<module path>/..." for every module of the workspace.
-func modulePatterns(ctx context.Context, workspace string, stderr io.Writer) ([]string, error) {
-	// Module paths, not directories: "..." skips directories whose names
-	// start with "_".
-	cmd := exec.CommandContext(ctx, "go", "list", "-m", "-f", "{{.Path}}")
-	cmd.Dir = workspace
-	cmd.Stderr = stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("go list -m: %w", err)
-	}
-	var patterns []string
-	for d := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		patterns = append(patterns, d+"/...")
-	}
-	return patterns, nil
 }
 
 // mainPackages records the first-party packages among pkgs and their

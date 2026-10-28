@@ -435,6 +435,26 @@ func writeModule(t *testing.T) string {
 	return dir
 }
 
+func TestAnalyzeCancelled(t *testing.T) {
+	dir := writeModule(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// spec: an interrupted analysis fails with the cancellation as its
+	// cause, whether it was finding the modules or analyzing.
+	for name, args := range map[string][]string{
+		"every module": {"analyze", "-C", dir},
+		"a pattern":    {"analyze", "-C", dir, "./cmd/x"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := root.New(strings.NewReader(""), io.Discard, io.Discard)
+			New(r)
+			if err := r.Command.ParseAndRun(ctx, args); !errors.Is(err, context.Canceled) {
+				t.Fatalf("got %v, want context.Canceled", err)
+			}
+		})
+	}
+}
+
 func TestAnalyzePackages(t *testing.T) {
 	dir := writeModule(t)
 	for name, args := range map[string][]string{

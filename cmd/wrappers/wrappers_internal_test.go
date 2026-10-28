@@ -119,6 +119,24 @@ func TestWrappersErrors(t *testing.T) {
 	}
 }
 
+func TestWrappersCancelled(t *testing.T) {
+	dir := writeModule(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for name, args := range map[string][]string{
+		"every module": {"wrappers", "-C", dir},
+		"a pattern":    {"wrappers", "-C", dir, "./memo"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := root.New(strings.NewReader(""), io.Discard, io.Discard)
+			New(r)
+			if err := r.Command.ParseAndRun(ctx, args); !errors.Is(err, context.Canceled) {
+				t.Fatalf("got %v, want context.Canceled", err)
+			}
+		})
+	}
+}
+
 func TestWrappersHelp(t *testing.T) {
 	var out bytes.Buffer
 	r := root.New(strings.NewReader(""), io.Discard, &out)

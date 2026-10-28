@@ -22,6 +22,9 @@ const (
 	exitSuccess = 0
 	exitFail    = 1
 	exitUsage   = 2
+	// exitInterrupted is what a shell reports for a process SIGINT ended:
+	// 128 plus the signal's number.
+	exitInterrupted = 130
 )
 
 func main() {
@@ -30,7 +33,18 @@ func main() {
 		syscall.SIGQUIT, // Ctrl-\
 		syscall.SIGTERM, // "the normal way to politely ask a program to terminate"
 	)
+	// The first signal cancels ctx, and work stops at its next check, which
+	// can be tens of seconds away in the middle of an analysis. Restoring the
+	// default handling then lets a second signal end the process at once.
+	// stopNotice runs before stop so that a run that ends normally, which
+	// also cancels ctx, prints nothing.
+	stopNotice := context.AfterFunc(ctx, func() {
+		stop()
+		_, _ = fmt.Fprintf(os.Stderr, "%v: stopping; send it again to quit at once\n",
+			context.Cause(ctx))
+	})
 	code := run(ctx, os.Args, os.Stdin, os.Stdout, os.Stderr)
+	stopNotice()
 	stop()
 	os.Exit(code)
 }
@@ -56,6 +70,11 @@ func run(
 		// The command has already reported its outcome; the code is the rest
 		// of the message, so printing an error here would only add noise.
 		return int(exitErr)
+	case errors.Is(err, context.Canceled):
+		// main has already said a signal stopped the run; the stack trace of
+		// a cancellation says nothing more.
+		_, _ = fmt.Fprintln(stderr, "error: interrupted")
+		return exitInterrupted
 	case errors.Is(err, root.ErrUsage):
 		// The dispatcher has already printed the command's help above this.
 		_, _ = fmt.Fprintf(stderr, "error: %+v\n", err)

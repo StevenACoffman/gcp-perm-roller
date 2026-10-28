@@ -28,6 +28,7 @@ package gcpperms
 
 import (
 	"cmp"
+	"context"
 	"go/token"
 	"go/types"
 	"path/filepath"
@@ -242,7 +243,12 @@ func workerCount(p int) int {
 
 // Analyze loads cfg.Patterns and reports the SDK calls reachable from each
 // main package they contain.
-func Analyze(cfg *Config) (Result, error) {
+//
+// When ctx is cancelled, loading stops, and so does the analysis once the
+// binaries being analyzed are done; one can take tens of seconds, since
+// call graph construction cannot be interrupted. The error then matches
+// ctx.Err() through errors.Is.
+func Analyze(ctx context.Context, cfg *Config) (Result, error) {
 	const op = "gcpperms.Analyze"
 	algo, err := ParseAlgorithm(string(cfg.Algorithm))
 	if err != nil {
@@ -252,12 +258,7 @@ func Analyze(cfg *Config) (Result, error) {
 	if err != nil {
 		return Result{}, errors.Wrap(err, op)
 	}
-	pcfg := &packages.Config{
-		Mode:       packages.LoadAllSyntax | packages.NeedModule,
-		Dir:        cfg.Dir,
-		BuildFlags: []string{"-tags=" + strings.Join(cfg.Tags, ",")},
-	}
-	pkgs, err := packages.Load(pcfg, cfg.Patterns...)
+	pkgs, err := loadPackages(ctx, packages.LoadAllSyntax|packages.NeedModule, cfg)
 	if err != nil {
 		return Result{}, errors.Wrap(err, op)
 	}
@@ -267,15 +268,42 @@ func Analyze(cfg *Config) (Result, error) {
 	mains := healthyMains(pkgs, broken, &res)
 	// Build SSA only for the healthy part of the program; ill-typed
 	// packages cannot be translated.
+	// Building takes a second or two and starts every package at once, so
+	// it is not worth interrupting.
 	prog, ssaPkgs := ssautil.AllPackages(mains, ssa.InstantiateGenerics)
 	prog.Build()
 
 	a := analyzer{
 		prog: prog, firstParty: firstParty, root: root, algo: algo, wrappers: cfg.Wrappers,
 	}
-	res.Binaries = a.binaries(ssaPkgs, workerCount(cfg.Parallelism))
+	if res.Binaries, err = a.binaries(ctx, ssaPkgs, workerCount(cfg.Parallelism)); err != nil {
+		return Result{}, errors.Wrap(err, op)
+	}
 	sort.Strings(res.Skipped)
 	return res, nil
+}
+
+// loadPackages loads cfg.Patterns in cfg.Dir with cfg.Tags and the given
+// mode. When ctx is done, the error is ctx.Err(): go/packages reports a
+// go list it had to stop only as text, which errors.Is cannot match.
+func loadPackages(
+	ctx context.Context,
+	mode packages.LoadMode,
+	cfg *Config,
+) ([]*packages.Package, error) {
+	pkgs, err := packages.Load(&packages.Config{
+		Context:    ctx,
+		Mode:       mode,
+		Dir:        cfg.Dir,
+		BuildFlags: []string{"-tags=" + strings.Join(cfg.Tags, ",")},
+	}, cfg.Patterns...)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, errors.WithStack(ctxErr)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "loading packages")
+	}
+	return pkgs, nil
 }
 
 // classify walks pkgs and their dependencies. It returns the import paths
@@ -328,23 +356,42 @@ func healthyMains(
 // by package path. Every package in ssaPkgs type-checked, so none is nil.
 // The built program is read-only apart from its own locked caches, so
 // binaries can be analyzed concurrently.
-func (a analyzer) binaries(ssaPkgs []*ssa.Package, workers int) []Binary {
+//
+// Once ctx is cancelled, no binary starts; binaries returns ctx.Err() when
+// those already started are done, so no goroutine outlives the call.
+func (a analyzer) binaries(
+	ctx context.Context,
+	ssaPkgs []*ssa.Package,
+	workers int,
+) ([]Binary, error) {
 	bins := make([]Binary, len(ssaPkgs))
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for i, sp := range ssaPkgs {
 		wg.Go(func() {
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			defer func() { <-sem }()
+			// A slot may free up just as ctx is cancelled, and select
+			// picks between ready cases at random.
+			if ctx.Err() != nil {
+				return
+			}
 			bins[i] = a.binary(sp)
 		})
 	}
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, errors.WithStack(err)
+	}
 	slices.SortFunc(
 		bins,
 		func(a, b Binary) int { return strings.Compare(a.Package, b.Package) },
 	)
-	return bins
+	return bins, nil
 }
 
 func (a analyzer) binary(mainPkg *ssa.Package) Binary {

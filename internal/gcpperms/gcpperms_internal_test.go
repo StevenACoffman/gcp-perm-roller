@@ -2,6 +2,7 @@ package gcpperms
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,7 +156,7 @@ func TestAnalyzeWrappers(t *testing.T) {
 		t.Skip("loads and type-checks the Google Cloud SDK")
 	}
 	const fixture = "github.com/StevenACoffman/gcp-perm-roller/internal/gcpperms/testdata/cached"
-	res, err := Analyze(&Config{
+	res, err := Analyze(context.Background(), &Config{
 		Dir:      ".",
 		Patterns: []string{"./testdata/cached"},
 		Wrappers: []Wrapper{{Function: fixture + ".cache", Params: []int{0}}},
@@ -172,7 +173,10 @@ func TestAnalyzeWrappers(t *testing.T) {
 
 func TestFindWrappers(t *testing.T) {
 	const pkg = "github.com/StevenACoffman/gcp-perm-roller/internal/gcpperms/testdata/wrappers"
-	got, err := FindWrappers(&Config{Dir: ".", Patterns: []string{"./testdata/wrappers"}})
+	got, err := FindWrappers(
+		context.Background(),
+		&Config{Dir: ".", Patterns: []string{"./testdata/wrappers"}},
+	)
 	ok(t, err)
 	type found struct {
 		function string
@@ -237,10 +241,19 @@ func TestFindWrappers(t *testing.T) {
 }
 
 func TestFindWrappersLoadError(t *testing.T) {
-	if _, err := FindWrappers(
+	if _, err := FindWrappers(context.Background(),
 		&Config{Dir: "testdata/nope", Patterns: []string{"./..."}},
 	); err == nil {
 		t.Fatal("found wrappers in a missing directory")
+	}
+}
+
+func TestFindWrappersCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := FindWrappers(ctx, &Config{Dir: ".", Patterns: []string{"./testdata/wrappers"}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", err)
 	}
 }
 
@@ -290,7 +303,7 @@ func TestAnalyze(t *testing.T) {
 	const fixture = "github.com/StevenACoffman/gcp-perm-roller/internal/gcpperms/testdata/"
 	// One load covers every fixture. Patterns are deliberately out of
 	// order to check that results are sorted.
-	res, err := Analyze(&Config{
+	res, err := Analyze(context.Background(), &Config{
 		Dir: ".",
 		Patterns: []string{
 			// A library first: only main packages are binaries.
@@ -458,7 +471,10 @@ func TestParseAlgorithm(t *testing.T) {
 
 func TestAnalyzeRejectsUnknownAlgorithm(t *testing.T) {
 	// The algorithm is checked before anything is loaded.
-	_, err := Analyze(&Config{Dir: "testdata/does-not-exist", Algorithm: "cha"})
+	_, err := Analyze(
+		context.Background(),
+		&Config{Dir: "testdata/does-not-exist", Algorithm: "cha"},
+	)
 	if err == nil || !strings.Contains(err.Error(), `"cha"`) {
 		t.Fatalf("Analyze with algorithm cha returned %v", err)
 	}
@@ -497,8 +513,56 @@ func TestWorkerCount(t *testing.T) {
 	}
 }
 
+func TestAnalyzeCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// spec: a cancelled analysis stops loading and says why.
+	_, err := Analyze(ctx, &Config{Dir: ".", Patterns: []string{"./testdata/cached"}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context.Canceled", err)
+	}
+}
+
+func TestBinariesStopWhenCancelled(t *testing.T) {
+	_, pkgs := buildSSA(t,
+		[2]string{"example.com/one", "package main\n\nfunc main() {}\n"},
+		[2]string{"example.com/two", "package main\n\nfunc main() {}\n"},
+	)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	tests := map[string]struct {
+		ctx     context.Context
+		want    []string
+		wantErr error
+	}{
+		"running": {
+			ctx:  context.Background(),
+			want: []string{"example.com/one", "example.com/two"},
+		},
+		// spec: once cancelled, no binary is analyzed and the cause is
+		// returned.
+		"cancelled": {ctx: cancelled, wantErr: context.Canceled},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			bins, err := analyzer{algo: VTA}.binaries(tc.ctx, pkgs, 1)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("got %v, want %v", err, tc.wantErr)
+			}
+			var got []string
+			for _, b := range bins {
+				got = append(got, b.Package)
+			}
+			equals(t, got, tc.want)
+		})
+	}
+}
+
 func TestAnalyzeLoadError(t *testing.T) {
-	_, err := Analyze(&Config{Dir: "testdata/does-not-exist", Patterns: []string{"."}})
+	_, err := Analyze(
+		context.Background(),
+		&Config{Dir: "testdata/does-not-exist", Patterns: []string{"."}},
+	)
 	if err == nil {
 		t.Fatal("Analyze in a missing directory succeeded")
 	}

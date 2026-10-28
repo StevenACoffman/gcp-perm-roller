@@ -182,7 +182,7 @@ func (cfg *Config) analyze(ctx context.Context, patterns []string) (gcpperms.Res
 	if err != nil {
 		return gcpperms.Result{}, err
 	}
-	res, err := gcpperms.Analyze(&gcpperms.Config{
+	res, err := gcpperms.Analyze(ctx, &gcpperms.Config{
 		Dir:         cfg.Dir,
 		Patterns:    patterns,
 		Algorithm:   algorithm,

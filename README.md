@@ -62,6 +62,10 @@ uppercase it, and replace dashes with underscores (`GCP_PERM_ROLLER_FORMAT=json`
 Analyzing a workspace of 20 modules takes about 90 seconds and 9 GB of memory with VTA,
 or about 45 seconds with `--algo=rta`. Patterns that match no main package are an error.
 
+Ctrl-C stops an analysis once the binaries being analyzed are done, which can take tens
+of seconds, since building a call graph cannot be interrupted. A second Ctrl-C quits at
+once. An interrupted run exits with status 130.
+
 `--outdir` names each file for the package's directory relative to `-C`, with slashes
 turned into dashes (`billing/cmd/worker` becomes `billing-cmd-worker.txt`). Each file
 starts with a `Code generated` line naming the command that reproduces it. A run also
