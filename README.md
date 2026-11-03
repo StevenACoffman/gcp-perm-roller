@@ -260,6 +260,47 @@ the command warns on stderr about each condition it drops, such as a temporary g
 expiry. It also warns when some permissions need a custom role. The proposal grants none
 of them, so the simulator reports them as lost.
 
+## Checking Granted Roles
+
+After you grant the recommended roles, `gcp-perm-roller troubleshoot` asks IAM's
+[Policy Troubleshooter](https://cloud.google.com/policy-intelligence/docs/troubleshoot-access)
+whether the binaries' principal holds each permission `analyze` found. The troubleshooter
+counts inherited roles and deny policies, as IAM decides access.
+
+```sh
+gcp-perm-roller analyze -C ~/src/myworkspace --format=json > result.json
+gcp-perm-roller troubleshoot --from=result.json \
+  --principal=app@my-project.iam.gserviceaccount.com \
+  --resource=//cloudresourcemanager.googleapis.com/projects/my-project \
+  example.com/cmd/server
+```
+
+```text
+== example.com/cmd/server
+  app@my-project.iam.gserviceaccount.com on //cloudresourcemanager.googleapis.com/projects/my-project
+    CAN_ACCESS           datastore.entities.get
+    CANNOT_ACCESS        datastore.entities.update (conditional)
+  1 of 2 permissions held
+```
+
+| Flag                    | Meaning                                                           |
+| ----------------------- | ----------------------------------------------------------------- |
+| `--from`                | Results saved with `analyze --format=json`; repeatable (required) |
+| `--principal`           | The email of the service account or user (required)               |
+| `--resource`            | The full resource name to check on (required)                     |
+| `--include-conditional` | Also check the permissions needed only on some paths              |
+| `--strict`              | Exit non-zero if the principal might lack any permission          |
+| `--format`              | `text` (default) or `json`                                        |
+
+Package arguments name the binaries to check. Without them, it checks every binary in the
+results. It checks each permission once, on `--resource`. A permission a binary uses on a
+resource inside the project, such as a bucket, counts as held when the project grants it.
+The troubleshooter answers `UNKNOWN_INFO` when the caller cannot read every policy that
+decides access, and `UNKNOWN_CONDITIONAL` when a condition needs request details it lacks.
+A caller who cannot read deny policies gets `UNKNOWN_INFO` even for a permission the allow
+policies grant. The report notes `allowed; deny policies not readable` then, and
+`--strict` still counts it, since a deny policy might block it.
+
 ## How It Works
 
 1. Loads the packages and builds SSA for the whole program, dependencies included.
