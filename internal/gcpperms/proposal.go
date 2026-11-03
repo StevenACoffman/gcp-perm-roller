@@ -24,7 +24,8 @@ func (p Policy) Propose(member string, roles []string, replaced []HeldBinding) (
 	const op = "gcpperms.Policy.Propose"
 	if p.raw == nil {
 		return nil, errors.Errorf(
-			"%s: only one resource's policy can be proposed, not get-ancestors-iam-policy output",
+			"%s: only one resource's policy can be proposed, not get-ancestors-iam-policy "+
+				"or analyze-iam-policy output",
 			op,
 		)
 	}

@@ -171,6 +171,20 @@ inherited role (`inherited from folders/123456789012`):
 gcloud projects get-ancestors-iam-policy my-project > policy.yaml
 ```
 
+A policy does not list a group's members, so from a policy, `import` does not count what
+a user holds through a group. Cloud Asset Inventory's analysis does: give `import` what
+`analyze-iam-policy` prints for the member, with groups expanded. Name the project with
+`--full-resource-name`, so the analysis covers the project and its ancestors, as
+`get-ancestors-iam-policy` does. Each role held through a group names the group
+(`through group:eng@example.com`). The analysis needs the Cloud Asset API enabled and
+`cloudasset.assets.analyzeIamPolicy` on the project.
+
+```sh
+gcloud asset analyze-iam-policy --project=my-project \
+  --full-resource-name=//cloudresourcemanager.googleapis.com/projects/my-project \
+  --identity=user:ada@example.com --expand-groups > policy.yaml
+```
+
 ```text
 == user:ada@example.com
   Holds:
@@ -210,11 +224,19 @@ How bindings count:
   A custom role with no definition stops the import, so its permissions are never left out
   silently.
 
-The result matches what the member holds now, not what it needs. The policy does not
-list a group's members, so a user's grants through groups are not counted; name the
-group instead. The report counts the deny policies that `get-ancestors-iam-policy
---include-deny` adds, but does not apply them: a permission one denies still counts as
-held.
+The result matches what the member holds now, not what it needs. From a policy rather
+than an analysis, `import` does not count a user's grants through groups. Name the group
+instead.
+
+`import` applies the deny policies that `get-ancestors-iam-policy --include-deny` adds. It
+leaves out a permission a rule denies to the member, by name or as everyone, so no chosen
+role grants it. A rule *might* deny a permission when the policy alone cannot decide: the
+rule names a group or another set of principals the member might be in, makes an
+exception for one, or has a condition, which can only test resource tags. Those
+permissions still count, and the report lists each with its reason. Deny rules name
+permissions in the v2 form of IAM (`cloudresourcemanager.googleapis.com/projects.delete`).
+[`deny_names.go`](internal/gcpperms/deny_names.go), generated with `support_levels.go`,
+maps the v1 names whose service differs from their domain.
 
 ### Checking a Proposal Against Recent Access
 
@@ -231,7 +253,8 @@ gcloud iam simulator replay-recent-access \
   //cloudresourcemanager.googleapis.com/projects/my-project proposed.json
 ```
 
-A proposal needs one project's policy, not `get-ancestors-iam-policy` output, and
+A proposal needs one project's policy, not `get-ancestors-iam-policy` or
+`analyze-iam-policy` output, and
 `--member` with its type. The proposal grants the recommended roles without conditions, so
 the command warns on stderr about each condition it drops, such as a temporary grant's
 expiry. It also warns when some permissions need a custom role. The proposal grants none

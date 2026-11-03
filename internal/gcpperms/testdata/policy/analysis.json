@@ -1,0 +1,134 @@
+[
+  {
+    "policy": {
+      "attachedResource": "//cloudresourcemanager.googleapis.com/projects/123456789",
+      "binding": {
+        "members": [
+          "group:eng@example.com"
+        ],
+        "role": "roles/datastore.user"
+      }
+    },
+    "ACLs": [
+      {
+        "accesses": [
+          {
+            "role": "x"
+          }
+        ],
+        "identities": [
+          {
+            "name": "user:ada@example.com"
+          },
+          {
+            "name": "group:eng@example.com"
+          }
+        ],
+        "resources": [
+          {
+            "fullResourceName": "//cloudresourcemanager.googleapis.com/projects/123456789"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "policy": {
+      "attachedResource": "//cloudresourcemanager.googleapis.com/projects/123456789",
+      "binding": {
+        "members": [
+          "user:ada@example.com"
+        ],
+        "role": "roles/pubsub.publisher"
+      }
+    },
+    "ACLs": [
+      {
+        "accesses": [
+          {
+            "role": "x"
+          }
+        ],
+        "identities": [
+          {
+            "name": "user:ada@example.com"
+          }
+        ],
+        "resources": [
+          {
+            "fullResourceName": "//cloudresourcemanager.googleapis.com/projects/123456789"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "policy": {
+      "attachedResource": "//cloudresourcemanager.googleapis.com/projects/123456789",
+      "binding": {
+        "members": [
+          "group:eng@example.com"
+        ],
+        "role": "roles/datastore.user"
+      }
+    },
+    "ACLs": [
+      {
+        "accesses": [
+          {
+            "role": "x"
+          }
+        ],
+        "identities": [
+          {
+            "name": "user:ada@example.com"
+          }
+        ],
+        "resources": [
+          {
+            "fullResourceName": "//cloudresourcemanager.googleapis.com/projects/123456789"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "policy": {
+      "attachedResource": "//cloudresourcemanager.googleapis.com/folders/123456789012",
+      "binding": {
+        "condition": {
+          "expression": "resource.name.startsWith(\"projects/_/buckets/logs\")",
+          "title": "Logs bucket only"
+        },
+        "members": [
+          "group:eng@example.com",
+          "group:ops@example.com"
+        ],
+        "role": "roles/storage.objectViewer"
+      }
+    },
+    "ACLs": [
+      {
+        "accesses": [
+          {
+            "role": "x"
+          }
+        ],
+        "identities": [
+          {
+            "name": "user:ada@example.com"
+          },
+          {
+            "name": "group:eng@example.com"
+          }
+        ],
+        "resources": [
+          {
+            "fullResourceName": "//cloudresourcemanager.googleapis.com/projects/123456789"
+          }
+        ],
+        "conditionEvaluationValue": "CONDITIONAL"
+      }
+    ]
+  }
+]

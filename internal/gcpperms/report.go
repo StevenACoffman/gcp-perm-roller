@@ -105,7 +105,8 @@ func WriteMemberAccess(w io.Writer, a *MemberAccess) error {
 	ew := &errWriter{w: w}
 	ew.printf("== %s\n", a.Member)
 	ew.printf("  Holds:\n")
-	for _, b := range a.Bindings {
+	for i := range a.Bindings {
+		b := &a.Bindings[i]
 		if note := bindingNote(b); note != "" {
 			ew.printf("    %-45s %s\n", b.Role, note)
 		} else {
@@ -117,12 +118,7 @@ func WriteMemberAccess(w io.Writer, a *MemberAccess) error {
 		ew.printf(", and %d more under conditions", n)
 	}
 	ew.printf("\n")
-	if a.DenyPolicies > 0 {
-		ew.printf(
-			"  Deny policies not applied: %d (permissions they deny are still counted)\n",
-			a.DenyPolicies,
-		)
-	}
+	writeDenials(ew, a)
 	writeSelection(ew, a.PredefinedRoles)
 	return ew.err
 }
@@ -202,6 +198,40 @@ func writeSites(ew *errWriter, calls []Call) {
 	}
 }
 
+// writeDenials writes how a's deny policies deny its permissions: those
+// they deny, which are not counted, and those they may deny, which are.
+func writeDenials(ew *errWriter, a *MemberAccess) {
+	if a.DenyPolicies == 0 {
+		return
+	}
+	ew.printf("  %d deny policies\n", a.DenyPolicies)
+	var certain, possible []Denial
+	for _, d := range a.Denials {
+		if d.Certain {
+			certain = append(certain, d)
+		} else {
+			possible = append(possible, d)
+		}
+	}
+	writeDenialList(ew, "Denied, so not counted:", certain)
+	writeDenialList(ew, "Possibly denied, still counted:", possible)
+}
+
+// writeDenialList writes denials under title, if there are any.
+func writeDenialList(ew *errWriter, title string, denials []Denial) {
+	if len(denials) == 0 {
+		return
+	}
+	ew.printf("  %s\n", title)
+	for _, d := range denials {
+		note := "by " + d.Policy
+		if d.Reason != "" {
+			note += ", " + d.Reason
+		}
+		ew.printf("    %-45s %s\n", d.Permission, note)
+	}
+}
+
 // writeSelection writes one binary's predefined roles.
 func writeSelection(ew *errWriter, sel *RoleSelection) {
 	if sel == nil || len(sel.Grants)+len(sel.Uncovered) == 0 {
@@ -264,12 +294,15 @@ func supportNote(level SupportLevel) string {
 	return "testing in custom roles"
 }
 
-// bindingNote says when a held binding applies, naming its condition, and
-// where it is inherited from.
-func bindingNote(b HeldBinding) string {
+// bindingNote says when a held binding applies, naming its condition, the
+// groups it is held through, and where it is inherited from.
+func bindingNote(b *HeldBinding) string {
 	var notes []string
 	if b.Condition != nil {
 		notes = append(notes, conditionNote(b.State)+": "+b.Condition.Name())
+	}
+	if len(b.Through) > 0 {
+		notes = append(notes, "through "+strings.Join(b.Through, ", "))
 	}
 	if b.Resource != "" {
 		notes = append(notes, "inherited from "+b.Resource)

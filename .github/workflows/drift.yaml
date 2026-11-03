@@ -54,7 +54,7 @@ jobs:
         retention-days: 30
 
   support-levels:
-    name: Custom-role support levels
+    name: Permission support lists
     runs-on: ubuntu-latest
     # One page fetch; the ceiling is against a hang.
     timeout-minutes: 10
@@ -67,11 +67,11 @@ jobs:
     - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
       with:
         cache: true
-    - name: Regenerate support_levels.go
+    - name: Regenerate support_levels.go and deny_names.go
       run: go generate ./internal/gcpperms
-    - name: Fail if Google's list changed
+    - name: Fail if Google's lists changed
       run: |
-        if ! git diff --exit-code internal/gcpperms/support_levels.go; then
-          echo "::error::Google changed custom-role support levels. Run 'go generate ./internal/gcpperms' and commit the result."
+        if ! git diff --exit-code internal/gcpperms/support_levels.go internal/gcpperms/deny_names.go; then
+          echo "::error::Google changed its permission support lists. Run 'go generate ./internal/gcpperms' and commit the result."
           exit 1
         fi

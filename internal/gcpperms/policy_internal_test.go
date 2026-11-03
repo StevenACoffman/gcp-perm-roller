@@ -69,7 +69,35 @@ func TestParsePolicyAncestors(t *testing.T) {
 				Resource: "organizations/987654321098",
 			},
 		},
-		DenyPolicies: 1,
+		DenyPolicies: 2,
+		DenyRules: []DenyRule{
+			{
+				Policy:            "No project deletion",
+				DeniedPrincipals:  []string{"principalSet://goog/public:all"},
+				DeniedPermissions: []string{"cloudresourcemanager.googleapis.com/projects.delete"},
+			},
+			{
+				Policy:            "No project deletion",
+				DeniedPrincipals:  []string{"principal://goog/subject/ada@example.com"},
+				DeniedPermissions: []string{"pubsub.googleapis.com/topics.list"},
+			},
+			{
+				Policy:            "No project deletion",
+				DeniedPrincipals:  []string{"principalSet://goog/group/contractors@example.com"},
+				DeniedPermissions: []string{"datastore.googleapis.com/entities.*"},
+			},
+			{
+				// spec: a deny policy with no display name is named by its ID.
+				Policy:               "prod-logs",
+				DeniedPrincipals:     []string{"principalSet://goog/public:all"},
+				DeniedPermissions:    []string{"storage.googleapis.com/objects.*"},
+				ExceptionPermissions: []string{"storage.googleapis.com/objects.get"},
+				DenialCondition: &Condition{
+					Title:      "Production only",
+					Expression: "resource.matchTag('123456789012/env', 'prod')",
+				},
+			},
+		},
 	})
 
 	for name, tc := range map[string]struct {
@@ -94,7 +122,7 @@ func TestParsePolicyAncestors(t *testing.T) {
 		},
 		"bad list": {
 			data: `[{"type": 3}]`,
-			want: "reading get-ancestors-iam-policy output",
+			want: "reading a policy",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

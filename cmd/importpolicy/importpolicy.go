@@ -41,10 +41,19 @@ Custom roles in the policy are got from the IAM API, which needs
 iam.roles.get on the project, or read from --custom-roles: a directory of
 ` + "`gcloud iam roles describe --format=json`" + ` files or a file holding a JSON array.
 
-The result is what the member holds now, not what it needs. The policy does
-not say who is in a group, so grants through groups are not counted for a
-user; name the group instead. Deny policies (--include-deny) are reported
-but not applied, so permissions they deny are still counted.
+To count grants through groups too, give it what Cloud Asset Inventory's
+analysis of the project prints for the member, groups expanded:
+
+  gcloud asset analyze-iam-policy --project=my-project \
+      --full-resource-name=//cloudresourcemanager.googleapis.com/projects/my-project \
+      --identity=user:ada@example.com --expand-groups > policy.yaml
+
+The result is what the member holds now, not what it needs. A policy does
+not say who is in a group, so from a policy, grants through groups are not
+counted for a user; name the group instead, or give the analysis. Deny policies (--include-deny) are applied:
+a permission denied to the member is not counted, and one a rule may deny,
+because of a condition or a group the member may be in, is counted and
+reported.
 
 --proposed-policy writes the policy as it would be with the member's roles
 replaced by the recommended ones. Replay recent access against it to see
@@ -55,7 +64,8 @@ whether the change would have denied anything the member did:
   gcloud iam simulator replay-recent-access \
       //cloudresourcemanager.googleapis.com/projects/my-project proposed.json
 
-It needs one project's policy, and --member with its type.`
+It needs one project's policy, not ancestors' or an analysis, and --member
+with its type.`
 
 // Config holds the configuration for the import command.
 type Config struct {
@@ -78,8 +88,8 @@ func New(parent *root.Config) *Config {
 	cfg.Config = parent
 	cfg.Flags = ff.NewFlagSet("import").SetParent(parent.Flags)
 	cfg.Flags.StringVar(&cfg.Policy, 0, "policy", "",
-		"the policy file, as gcloud projects get-iam-policy or get-ancestors-iam-policy "+
-			"prints it in YAML or JSON (required)")
+		"the policy file, as gcloud projects get-iam-policy or get-ancestors-iam-policy, "+
+			"or asset analyze-iam-policy, prints it in YAML or JSON (required)")
 	cfg.Flags.StringVar(&cfg.Member, 0, "member", "",
 		"the member whose roles to replace, such as user:ada@example.com (required)")
 	cfg.Flags.StringVar(&cfg.Format, 0, "format", "text", "output format: text or json")
@@ -200,7 +210,7 @@ func (cfg *Config) memberAccess(
 		return nil, nil, fmt.Errorf("no definition of %s in --custom-roles=%s",
 			strings.Join(missing, ", "), cfg.CustomRoles)
 	}
-	access.DenyPolicies = policy.DenyPolicies
+	access = policy.ApplyDenials(&access)
 	return &access, roles, nil
 }
 

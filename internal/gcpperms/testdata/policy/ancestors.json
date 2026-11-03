@@ -32,6 +32,26 @@
               "principalSet://goog/public:all"
             ]
           }
+        },
+        {
+          "denyRule": {
+            "deniedPermissions": [
+              "pubsub.googleapis.com/topics.list"
+            ],
+            "deniedPrincipals": [
+              "principal://goog/subject/ada@example.com"
+            ]
+          }
+        },
+        {
+          "denyRule": {
+            "deniedPermissions": [
+              "datastore.googleapis.com/entities.*"
+            ],
+            "deniedPrincipals": [
+              "principalSet://goog/group/contractors@example.com"
+            ]
+          }
         }
       ],
       "uid": "6c6f2b2e-5d0a-4e4b-9c1d-3f7a2b8e9d10"
@@ -56,6 +76,34 @@
       ],
       "etag": "BwYwq1Xk0aQ=",
       "version": 3
+    },
+    "type": "folder"
+  },
+  {
+    "id": "123456789012",
+    "policy": {
+      "etag": "MTc1NjM0NTY3OQ==",
+      "kind": "DenyPolicy",
+      "name": "policies/cloudresourcemanager.googleapis.com%2Ffolders%2F123456789012/denypolicies/prod-logs",
+      "rules": [
+        {
+          "denyRule": {
+            "denialCondition": {
+              "expression": "resource.matchTag('123456789012/env', 'prod')",
+              "title": "Production only"
+            },
+            "deniedPermissions": [
+              "storage.googleapis.com/objects.*"
+            ],
+            "deniedPrincipals": [
+              "principalSet://goog/public:all"
+            ],
+            "exceptionPermissions": [
+              "storage.googleapis.com/objects.get"
+            ]
+          }
+        }
+      ]
     },
     "type": "folder"
   },
