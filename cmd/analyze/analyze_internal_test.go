@@ -215,7 +215,7 @@ func TestAnalyzeFromJSONRoundTrips(t *testing.T) {
 	ok(t, err)
 	var got gcpperms.Result
 	ok(t, json.Unmarshal([]byte(out), &got))
-	want, err := loadResults([]string{"testdata/one.json", "testdata/two.json"})
+	want, err := gcpperms.LoadResults([]string{"testdata/one.json", "testdata/two.json"})
 	ok(t, err)
 	// spec: saved results are read back as written, in file order.
 	equals(t, got, want)
