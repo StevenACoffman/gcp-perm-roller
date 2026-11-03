@@ -1,0 +1,50 @@
+---
+id: demo
+policy:
+  bindings:
+  - members:
+    - user:ada@example.com
+    role: roles/datastore.user
+  etag: BwZe6DcM2eM=
+  version: 1
+type: project
+---
+id: demo
+policy:
+  displayName: No project deletion
+  etag: MTc1NjM0NTY3OA==
+  kind: DenyPolicy
+  name: policies/cloudresourcemanager.googleapis.com%2Fprojects%2Fdemo/denypolicies/no-delete
+  rules:
+  - denyRule:
+      deniedPermissions:
+      - cloudresourcemanager.googleapis.com/projects.delete
+      deniedPrincipals:
+      - principalSet://goog/public:all
+  uid: 6c6f2b2e-5d0a-4e4b-9c1d-3f7a2b8e9d10
+type: project
+---
+id: '123456789012'
+policy:
+  bindings:
+  - condition:
+      expression: resource.name.startsWith("projects/_/buckets/logs")
+      title: Logs bucket only
+    members:
+    - group:eng@example.com
+    - user:ada@example.com
+    role: roles/storage.objectViewer
+  etag: BwYwq1Xk0aQ=
+  version: 3
+type: folder
+---
+id: '987654321098'
+policy:
+  bindings:
+  - members:
+    - domain:example.com
+    - user:ada@example.com
+    role: roles/pubsub.viewer
+  etag: BwYb2Wm9P4c=
+  version: 1
+type: organization

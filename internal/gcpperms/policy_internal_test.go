@@ -3,6 +3,7 @@ package gcpperms
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,91 @@ func TestParsePolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParsePolicyAncestors(t *testing.T) {
+	yamlPolicy := readPolicy(t, "ancestors.yaml")
+	// spec: gcloud's YAML documents and its --format=json list parse the
+	// same.
+	equals(t, readPolicy(t, "ancestors.json"), yamlPolicy)
+	// spec: the project's bindings come first, then each ancestor's, marked
+	// with where they are inherited from; the deny policy is only counted.
+	equals(t, yamlPolicy, Policy{
+		Bindings: []Binding{
+			{Role: "roles/datastore.user", Members: []string{"user:ada@example.com"}},
+			{
+				Role:    "roles/storage.objectViewer",
+				Members: []string{"group:eng@example.com", "user:ada@example.com"},
+				Condition: &Condition{
+					Title:      "Logs bucket only",
+					Expression: `resource.name.startsWith("projects/_/buckets/logs")`,
+				},
+				Resource: "folders/123456789012",
+			},
+			{
+				Role:     "roles/pubsub.viewer",
+				Members:  []string{"domain:example.com", "user:ada@example.com"},
+				Resource: "organizations/987654321098",
+			},
+		},
+		DenyPolicies: 1,
+	})
+
+	for name, tc := range map[string]struct {
+		data string
+		want string
+	}{
+		"two policies": {
+			data: "bindings: []\n---\nbindings: []\n",
+			want: "more than one policy",
+		},
+		"a policy and an ancestor": {
+			data: "bindings: []\n---\ntype: project\nid: p\npolicy: {}\n",
+			want: "more than one policy",
+		},
+		"unknown ancestor type": {
+			data: "type: billingAccount\nid: b\npolicy: {}\n",
+			want: `unknown ancestor type "billingAccount" of b`,
+		},
+		"bad ancestor policy": {
+			data: `[{"type": "folder", "id": "1", "policy": {"bindings": 3}}]`,
+			want: "folder 1",
+		},
+		"bad list": {
+			data: `[{"type": 3}]`,
+			want: "reading get-ancestors-iam-policy output",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParsePolicy([]byte(tc.data))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+
+	// spec: separators around a single policy, and empty documents, are
+	// not policies of their own.
+	p, err := ParsePolicy(
+		[]byte("---\nbindings:\n- role: roles/viewer\n  members: [user:a@b.c]\n---\n"),
+	)
+	ok(t, err)
+	equals(t, len(p.Bindings), 1)
+}
+
+func TestMemberBindingsCarryResource(t *testing.T) {
+	p := readPolicy(t, "ancestors.yaml")
+	// spec: an inherited binding says where it is inherited from.
+	equals(t, p.MemberBindings("user:ada@example.com", policyNow), []HeldBinding{
+		{Role: "roles/datastore.user", State: Unconditional},
+		{
+			Role:      "roles/storage.objectViewer",
+			Condition: p.Bindings[1].Condition,
+			State:     Conditional,
+			Resource:  "folders/123456789012",
+		},
+		{Role: "roles/pubsub.viewer", State: Unconditional, Resource: "organizations/987654321098"},
+	})
 }
 
 func TestMemberBindings(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +26,11 @@ every permission one member holds through its bindings.
   gcloud projects get-iam-policy my-project > policy.yaml
   gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com
 
+To count grants inherited from the project's folders and organization too,
+give it the project's policy with its ancestors' instead:
+
+  gcloud projects get-ancestors-iam-policy my-project > policy.yaml
+
 Write the member as the policy does, with its type (user:, group:,
 serviceAccount:), or give a bare email to match any type. A binding whose
 condition only sets an expiry, as the Cloud Console's temporary access does,
@@ -39,8 +43,19 @@ iam.roles.get on the project, or read from --custom-roles: a directory of
 
 The result is what the member holds now, not what it needs. The policy does
 not say who is in a group, so grants through groups are not counted for a
-user; name the group instead. Grants inherited from folders and the
-organization are not in a project's policy.`
+user; name the group instead. Deny policies (--include-deny) are reported
+but not applied, so permissions they deny are still counted.
+
+--proposed-policy writes the policy as it would be with the member's roles
+replaced by the recommended ones. Replay recent access against it to see
+whether the change would have denied anything the member did:
+
+  gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
+      --proposed-policy=proposed.json
+  gcloud iam simulator replay-recent-access \
+      //cloudresourcemanager.googleapis.com/projects/my-project proposed.json
+
+It needs one project's policy, and --member with its type.`
 
 // Config holds the configuration for the import command.
 type Config struct {
@@ -50,6 +65,7 @@ type Config struct {
 	Format          string
 	Roles           string
 	CustomRoles     string
+	ProposedPolicy  string
 	RoleStages      []string
 	WithConditional bool
 	Flags           *ff.FlagSet
@@ -62,7 +78,8 @@ func New(parent *root.Config) *Config {
 	cfg.Config = parent
 	cfg.Flags = ff.NewFlagSet("import").SetParent(parent.Flags)
 	cfg.Flags.StringVar(&cfg.Policy, 0, "policy", "",
-		"the policy file, as gcloud projects get-iam-policy prints it in YAML or JSON (required)")
+		"the policy file, as gcloud projects get-iam-policy or get-ancestors-iam-policy "+
+			"prints it in YAML or JSON (required)")
 	cfg.Flags.StringVar(&cfg.Member, 0, "member", "",
 		"the member whose roles to replace, such as user:ada@example.com (required)")
 	cfg.Flags.StringVar(&cfg.Format, 0, "format", "text", "output format: text or json")
@@ -75,6 +92,9 @@ func New(parent *root.Config) *Config {
 		"launch stage of predefined roles to recommend; repeatable (default GA)")
 	cfg.Flags.BoolVar(&cfg.WithConditional, 0, "include-conditional",
 		"also cover the permissions the member holds under conditions")
+	cfg.Flags.StringVar(&cfg.ProposedPolicy, 0, "proposed-policy", "",
+		"also write the policy, with the member's roles replaced by the recommended ones, "+
+			"to this file, for gcloud iam simulator replay-recent-access")
 	cfg.Command = &ff.Command{
 		Name:      "import",
 		Usage:     "gcp-perm-roller import --policy=FILE --member=PRINCIPAL [FLAGS]",
@@ -91,16 +111,25 @@ func (cfg *Config) exec(ctx context.Context, args []string) error {
 	if err := cfg.checkUsage(args); err != nil {
 		return &root.UsageError{Err: fmt.Errorf("import: %w", err)}
 	}
-	access, roles, err := cfg.memberAccess(ctx)
+	policy, err := cfg.readPolicy()
 	if err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
-	need := access.Permissions
-	if cfg.WithConditional {
-		need = append(slices.Clone(need), access.ConditionalPermissions...)
+	access, roles, err := cfg.memberAccess(ctx, policy)
+	if err != nil {
+		return fmt.Errorf("import: %w", err)
 	}
-	sel := gcpperms.SelectRoles(need, roles, gcpperms.RoleFilter{Stages: cfg.RoleStages})
+	sel := gcpperms.SelectRoles(
+		access.Required(cfg.WithConditional),
+		roles,
+		gcpperms.RoleFilter{Stages: cfg.RoleStages},
+	)
 	access.PredefinedRoles = &sel
+	if cfg.ProposedPolicy != "" {
+		if err := cfg.propose(policy, access, sel); err != nil {
+			return fmt.Errorf("import: %w", err)
+		}
+	}
 	if cfg.Format == "json" {
 		err = gcpperms.WriteJSON(cfg.Stdout, access)
 	} else {
@@ -127,20 +156,26 @@ func (cfg *Config) checkUsage(args []string) error {
 	return nil
 }
 
-// memberAccess reads the policy and returns what the member holds in it,
-// with the roles that define its permissions: the predefined roles, and
-// the custom roles the member holds.
-func (cfg *Config) memberAccess(
-	ctx context.Context,
-) (*gcpperms.MemberAccess, []gcpperms.Role, error) {
+// readPolicy reads and parses --policy.
+func (cfg *Config) readPolicy() (gcpperms.Policy, error) {
 	data, err := os.ReadFile(cfg.Policy)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading the policy: %w", err)
+		return gcpperms.Policy{}, fmt.Errorf("reading the policy: %w", err)
 	}
 	policy, err := gcpperms.ParsePolicy(data)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", cfg.Policy, err)
+		return gcpperms.Policy{}, fmt.Errorf("%s: %w", cfg.Policy, err)
 	}
+	return policy, nil
+}
+
+// memberAccess returns what the member holds in policy, with the roles
+// that define its permissions: the predefined roles, and the custom roles
+// the member holds.
+func (cfg *Config) memberAccess(
+	ctx context.Context,
+	policy gcpperms.Policy,
+) (*gcpperms.MemberAccess, []gcpperms.Role, error) {
 	bindings := policy.MemberBindings(cfg.Member, time.Now())
 	if len(bindings) == 0 {
 		return nil, nil, fmt.Errorf("%s holds no role in %s", cfg.Member, cfg.Policy)
@@ -153,20 +188,61 @@ func (cfg *Config) memberAccess(
 	// The predefined roles define every role but custom ones; get those
 	// next, and only those the member holds.
 	access, missing := gcpperms.NewMemberAccess(cfg.Member, bindings, roles)
-	if len(missing) == 0 {
-		return &access, roles, nil
+	if len(missing) > 0 {
+		custom, err := cfg.loadCustomRoles(ctx, missing)
+		if err != nil {
+			return nil, nil, err
+		}
+		roles = append(roles, custom...)
+		access, missing = gcpperms.NewMemberAccess(cfg.Member, bindings, roles)
 	}
-	custom, err := cfg.loadCustomRoles(ctx, missing)
-	if err != nil {
-		return nil, nil, err
-	}
-	roles = append(roles, custom...)
-	access, missing = gcpperms.NewMemberAccess(cfg.Member, bindings, roles)
 	if len(missing) > 0 {
 		return nil, nil, fmt.Errorf("no definition of %s in --custom-roles=%s",
 			strings.Join(missing, ", "), cfg.CustomRoles)
 	}
+	access.DenyPolicies = policy.DenyPolicies
 	return &access, roles, nil
+}
+
+// propose writes policy, with the member's covered bindings replaced by
+// the roles in sel, to --proposed-policy. It warns on stderr about what
+// the proposal changes beyond the roles: conditions it drops, and
+// permissions it no longer grants because no predefined role holds them.
+func (cfg *Config) propose(
+	policy gcpperms.Policy,
+	access *gcpperms.MemberAccess,
+	sel gcpperms.RoleSelection,
+) error {
+	covered := access.Covered(cfg.WithConditional)
+	roles := make([]string, len(sel.Grants))
+	for i, g := range sel.Grants {
+		roles[i] = g.Role
+	}
+	data, err := policy.Propose(cfg.Member, roles, covered)
+	if err != nil {
+		return fmt.Errorf("proposing a policy: %w", err)
+	}
+	if err := os.WriteFile(cfg.ProposedPolicy, data, 0o600); err != nil {
+		return fmt.Errorf("writing the proposed policy: %w", err)
+	}
+	for _, b := range covered {
+		if b.Condition != nil {
+			_, _ = fmt.Fprintf(
+				cfg.Stderr,
+				"import: the proposed policy drops the condition %q of %s; its roles are granted without it\n",
+				b.Condition.Name(),
+				b.Role,
+			)
+		}
+	}
+	if n := len(sel.Uncovered); n > 0 {
+		_, _ = fmt.Fprintf(
+			cfg.Stderr,
+			"import: the proposed policy grants none of the %d permissions that need a custom role\n",
+			n,
+		)
+	}
+	return nil
 }
 
 // loadCustomRoles gets the roles names from the IAM API, or reads every

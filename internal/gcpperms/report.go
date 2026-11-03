@@ -117,6 +117,12 @@ func WriteMemberAccess(w io.Writer, a *MemberAccess) error {
 		ew.printf(", and %d more under conditions", n)
 	}
 	ew.printf("\n")
+	if a.DenyPolicies > 0 {
+		ew.printf(
+			"  Deny policies not applied: %d (permissions they deny are still counted)\n",
+			a.DenyPolicies,
+		)
+	}
 	writeSelection(ew, a.PredefinedRoles)
 	return ew.err
 }
@@ -258,24 +264,30 @@ func supportNote(level SupportLevel) string {
 	return "testing in custom roles"
 }
 
-// bindingNote says when a held binding applies, naming its condition.
+// bindingNote says when a held binding applies, naming its condition, and
+// where it is inherited from.
 func bindingNote(b HeldBinding) string {
-	if b.Condition == nil {
-		return ""
+	var notes []string
+	if b.Condition != nil {
+		notes = append(notes, conditionNote(b.State)+": "+b.Condition.Name())
 	}
-	name := b.Condition.Title
-	if name == "" {
-		name = b.Condition.Expression
+	if b.Resource != "" {
+		notes = append(notes, "inherited from "+b.Resource)
 	}
-	switch b.State {
+	return strings.Join(notes, "; ")
+}
+
+// conditionNote names the state of a binding that has a condition.
+func conditionNote(state ConditionState) string {
+	switch state {
 	case Unconditional:
-		return "temporary: " + name
+		return "temporary"
 	case Expired:
-		return "expired: " + name
+		return "expired"
 	case Conditional:
-		return "conditional: " + name
+		return "conditional"
 	}
-	return string(b.State) + ": " + name
+	return string(state)
 }
 
 // shortAPI trims the import path to its last unversioned element:

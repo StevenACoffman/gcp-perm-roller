@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/peterbourgon/ff/v4"
 	"github.com/peterbourgon/ff/v4/ffhelp"
@@ -71,6 +72,83 @@ func TestImport(t *testing.T) {
     roles/pubsub.viewer                           Pub/Sub Viewer, 2 permissions
       for pubsub.topics.get
 `)
+}
+
+func TestImportAncestors(t *testing.T) {
+	out, err := runImport(t,
+		"--policy="+filepath.Join("testdata", "ancestors.yaml"),
+		"--member=user:ada@example.com")
+	ok(t, err)
+	// spec: grants inherited from the folder and the organization count,
+	// and say where they come from; the deny policy is reported, not
+	// applied.
+	equals(t, out, `== user:ada@example.com
+  Holds:
+    roles/datastore.user
+    roles/storage.objectViewer                    conditional: Logs bucket only; inherited from folders/123456789012
+    roles/pubsub.viewer                           inherited from organizations/987654321098
+  4 permissions, and 2 more under conditions
+  Deny policies not applied: 1 (permissions they deny are still counted)
+  Predefined roles (0 permissions beyond those required):
+    roles/datastore.user                          Cloud Datastore User, 2 permissions
+      for datastore.entities.get, datastore.entities.list
+    roles/pubsub.viewer                           Pub/Sub Viewer, 2 permissions
+      for pubsub.topics.get, pubsub.topics.list
+`)
+}
+
+func TestImportProposedPolicy(t *testing.T) {
+	proposed := filepath.Join(t.TempDir(), "proposed.json")
+	var out, errOut bytes.Buffer
+	r := root.New(strings.NewReader(""), &out, &errOut)
+	New(r)
+	err := r.Command.ParseAndRun(context.Background(), []string{
+		"import",
+		"--policy=" + filepath.Join("testdata", "policy.yaml"),
+		"--roles=" + filepath.Join("testdata", "roles.json"),
+		"--custom-roles=" + filepath.Join("testdata", "custom"),
+		"--member=user:ada@example.com",
+		"--include-conditional",
+		"--proposed-policy=" + proposed,
+	})
+	ok(t, err)
+	data, err := os.ReadFile(proposed)
+	ok(t, err)
+	policy, err := gcpperms.ParsePolicy(data)
+	ok(t, err)
+	// spec: the member holds exactly the recommended roles, and the expired
+	// binding, which grants nothing, is left alone.
+	var held []string
+	for _, b := range policy.MemberBindings("user:ada@example.com", time.Now()) {
+		held = append(held, b.Role+" "+string(b.State))
+	}
+	equals(t, held, []string{
+		"roles/datastore.user unconditional",
+		"roles/pubsub.publisher expired",
+		"roles/pubsub.viewer unconditional",
+		"roles/storage.objectViewer unconditional",
+	})
+	// spec: dropping the condition is said, on stderr; stdout has only the
+	// report.
+	equals(t, errOut.String(),
+		"import: the proposed policy drops the condition \"Logs bucket only\" of "+
+			"roles/storage.objectViewer; its roles are granted without it\n")
+	if !strings.HasPrefix(out.String(), "== user:ada@example.com\n") {
+		t.Fatalf("stdout is not the report:\n%s", out.String())
+	}
+
+	// spec: a proposal needs one project's policy and a typed member.
+	for name, args := range map[string][]string{
+		"ancestors":  {"--policy=" + filepath.Join("testdata", "ancestors.yaml"), "--member=user:ada@example.com"},
+		"bare email": {"--member=ada@example.com"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := runImport(t, append(args, "--proposed-policy="+proposed)...)
+			if err == nil {
+				t.Fatal("wrote a proposal it cannot make")
+			}
+		})
+	}
 }
 
 func TestImportOptions(t *testing.T) {
@@ -211,5 +289,6 @@ func TestImportHelp(t *testing.T) {
 		"--custom-roles STRING",
 		"--role-stages STRING",
 		"--include-conditional",
+		"--proposed-policy STRING",
 	})
 }

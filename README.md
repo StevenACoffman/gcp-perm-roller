@@ -163,6 +163,14 @@ gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
   --roles ~/src/iam-dataset/gcp/roles
 ```
 
+To also count what the member holds on the project's folders and organization, give
+it the output of `get-ancestors-iam-policy` instead. The report names the source of each
+inherited role (`inherited from folders/123456789012`):
+
+```sh
+gcloud projects get-ancestors-iam-policy my-project > policy.yaml
+```
+
 ```text
 == user:ada@example.com
   Holds:
@@ -187,6 +195,7 @@ gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
 | `--custom-roles`        | Where to read the custom roles the member holds: `api` (default) or saved JSON |
 | `--role-stages`         | A launch stage to recommend; repeatable (default `GA`)                         |
 | `--include-conditional` | Also cover the permissions held under conditions                               |
+| `--proposed-policy`     | Also write the policy with the member's roles replaced, for the simulator      |
 
 How bindings count:
 
@@ -203,8 +212,30 @@ How bindings count:
 
 The result matches what the member holds now, not what it needs. The policy does not
 list a group's members, so a user's grants through groups are not counted; name the
-group instead. Grants inherited from the folder and organization are not in a project's
-policy (`gcloud projects get-ancestors-iam-policy` lists them).
+group instead. The report counts the deny policies that `get-ancestors-iam-policy
+--include-deny` adds, but does not apply them: a permission one denies still counts as
+held.
+
+### Checking a Proposal Against Recent Access
+
+`--proposed-policy=FILE` writes the policy with the member's roles replaced by the
+recommended ones. It takes the member out of the bindings the recommendation covers, grants
+it each recommended role, and keeps everything else in the policy. Give the file to the IAM
+policy simulator, which replays up to 1,000 access attempts from the past 90 days and
+reports any the change would have denied:
+
+```sh
+gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
+  --proposed-policy=proposed.json
+gcloud iam simulator replay-recent-access \
+  //cloudresourcemanager.googleapis.com/projects/my-project proposed.json
+```
+
+A proposal needs one project's policy, not `get-ancestors-iam-policy` output, and
+`--member` with its type. The proposal grants the recommended roles without conditions, so
+the command warns on stderr about each condition it drops, such as a temporary grant's
+expiry. It also warns when some permissions need a custom role. The proposal grants none
+of them, so the simulator reports them as lost.
 
 ## How It Works
 
