@@ -301,6 +301,34 @@ A caller who cannot read deny policies gets `UNKNOWN_INFO` even for a permission
 policies grant. The report notes `allowed; deny policies not readable` then, and
 `--strict` still counts it, since a deny policy might block it.
 
+## Comparing with Observed Usage
+
+The IAM recommender records, in its policy insights, which permissions of each role a
+member used in at most the last 90 days. `gcp-perm-roller compare-usage` compares those
+with what `analyze` found for the binaries that run as the member:
+
+```sh
+gcloud recommender insights list --insight-type=google.iam.policy.Insight \
+  --location=global --project=my-project --format=json > insights.json
+gcp-perm-roller compare-usage --from=result.json --insights=insights.json \
+  --member=serviceAccount:app@my-project.iam.gserviceaccount.com \
+  example.com/cmd/server example.com/cmd/worker
+```
+
+It sorts each permission into one of these groups:
+
+| Group                     | Meaning                                                             |
+| ------------------------- | ------------------------------------------------------------------- |
+| Used, not found           | A missing rule, a call `analyze` cannot follow, or another program  |
+| Found, not used           | A role an insight covers holds it, but nothing used it in that time |
+| Found, with no usage data | No role an insight covers holds it                                  |
+
+Name every binary that runs as the member, since the insights cannot tell them apart.
+Each insight covers one role, so `--roles` (as for `import`) says what each role holds.
+The report names an insight role with no definition, such as a custom role, and counts its
+permissions as having no usage data. The recommender's model-inferred permissions
+(`inferredPermissions`) are not counted as used.
+
 ## How It Works
 
 1. Loads the packages and builds SSA for the whole program, dependencies included.
