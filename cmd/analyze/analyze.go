@@ -6,7 +6,6 @@ package analyze
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -139,7 +138,10 @@ func (cfg *Config) exec(ctx context.Context, args []string) error {
 			return &root.UsageError{Err: errors.New(
 				"analyze: --from reads saved results, so it takes no packages")}
 		}
-		res, err = loadResults(cfg.From)
+		res, err = gcpperms.LoadResults(cfg.From)
+		if err != nil {
+			err = fmt.Errorf("analyze: %w", err)
+		}
 	} else {
 		res, err = cfg.analyze(ctx, args)
 	}
@@ -182,7 +184,7 @@ func (cfg *Config) analyze(ctx context.Context, patterns []string) (gcpperms.Res
 	if err != nil {
 		return gcpperms.Result{}, err
 	}
-	res, err := gcpperms.Analyze(&gcpperms.Config{
+	res, err := gcpperms.Analyze(ctx, &gcpperms.Config{
 		Dir:         cfg.Dir,
 		Patterns:    patterns,
 		Algorithm:   algorithm,
@@ -220,25 +222,6 @@ func (cfg *Config) wrappers() ([]gcpperms.Wrapper, error) {
 		out = append(out, ws...)
 	}
 	return out, nil
-}
-
-// loadResults reads and concatenates results saved with --format=json.
-func loadResults(files []string) (gcpperms.Result, error) {
-	var all gcpperms.Result
-	for _, file := range files {
-		data, err := os.ReadFile(file)
-		if err != nil {
-			return gcpperms.Result{}, fmt.Errorf("analyze: %w", err)
-		}
-		var res gcpperms.Result
-		if err := json.Unmarshal(data, &res); err != nil {
-			return gcpperms.Result{}, fmt.Errorf("analyze: parsing %s: %w", file, err)
-		}
-		all.Binaries = append(all.Binaries, res.Binaries...)
-		all.Skipped = append(all.Skipped, res.Skipped...)
-		all.Errors = append(all.Errors, res.Errors...)
-	}
-	return all, nil
 }
 
 // selectRoles chooses each binary's predefined roles when --roles is given

@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     # A pull request's changed lines are a small fraction of the module's mutants, but each
     # mutant reruns the end-to-end test. The ceiling is for a mutant that turns a loop
-    # infinite and is not caught by mutago's own per-mutant timeout.
-    timeout-minutes: 60
+    # infinite and is not caught by mutago's own per-mutant timeout. A large pull request
+    # can have more mutants than fit in it; the job then times out, and its annotations so
+    # far are still worth reading. Run `just mutate-diff` locally for the rest.
+    timeout-minutes: 90
     # --logger-github writes ::warning lines to the log, which needs no token.
     permissions:
       contents: read

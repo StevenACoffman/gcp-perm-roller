@@ -77,7 +77,7 @@ func (cfg *Config) exec(ctx context.Context, args []string) error {
 			return fmt.Errorf("wrappers: %w", err)
 		}
 	}
-	found, err := gcpperms.FindWrappers(&gcpperms.Config{
+	found, err := gcpperms.FindWrappers(ctx, &gcpperms.Config{
 		Dir:      cfg.Dir,
 		Patterns: patterns,
 		Tags:     cfg.Tags,

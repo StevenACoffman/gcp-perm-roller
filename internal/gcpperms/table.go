@@ -548,6 +548,41 @@ var rules = []rule{
 		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.ListVersions",
 		Perms:   []string{"artifactregistry.versions.list"},
 	},
+	{
+		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.ListPackages",
+		Perms:   []string{"artifactregistry.packages.list"},
+	},
+	{
+		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.CreateTag",
+		Perms:   []string{"artifactregistry.tags.create"},
+	},
+	// The reference pages for tags.patch and repositories.patch name no
+	// permission; iam-dataset's hand-written map pairs each update with a get
+	// of what it updates. Both gets are in roles/artifactregistry.reader.
+	{
+		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.UpdateTag",
+		Perms:   []string{"artifactregistry.tags.get", "artifactregistry.tags.update"},
+	},
+	{
+		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.DeleteTag",
+		Perms:   []string{"artifactregistry.tags.delete"},
+	},
+	{
+		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.UpdateRepository",
+		Perms: []string{
+			"artifactregistry.repositories.get",
+			"artifactregistry.repositories.update",
+		},
+	},
+	// Each version named needs the permission.
+	{
+		Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.BatchDeleteVersions",
+		Perms:   []string{"artifactregistry.versions.delete"},
+	},
+	// Wait and Poll fetch the long-running operation, for which neither the
+	// reference page nor iam-dataset names a permission; the call that
+	// started it is charged for the work.
+	{Pattern: "cloud.google.com/go/artifactregistry/apiv1.*Operation.*"},
 	{Pattern: "cloud.google.com/go/artifactregistry/apiv1.NewClient"},
 	{Pattern: "cloud.google.com/go/artifactregistry/apiv1.Client.Close"},
 	{Pattern: "cloud.google.com/go/artifactregistry/apiv1.*Iterator.*"},
@@ -576,6 +611,38 @@ var rules = []rule{
 	{Pattern: "cloud.google.com/go/iam/credentials/apiv1.NewIamCredentialsClient"},
 	{Pattern: "cloud.google.com/go/iam/credentials/apiv1.*amCredentials*Client.Close"},
 	{Pattern: "cloud.google.com/go/iam/credentials/apiv1/credentialspb.*"},
+
+	// The impersonated token source calls generateAccessToken on the target
+	// service account when it first needs a token, as GenerateAccessToken
+	// above does. With Delegates, each account in the chain must also be
+	// able to get tokens for the next.
+	{
+		Pattern: "google.golang.org/api/impersonate.CredentialsTokenSource",
+		Perms:   []string{"iam.serviceAccounts.getAccessToken"},
+	},
+
+	// Cloud Logging: grants on the project, folder, or organization that
+	// receives the entries, which logName or an entry's resource names. Log
+	// only queues an entry: the bundler Client.Logger creates sends the queue
+	// with entries.write, and Flush and Close make it send now, so the
+	// Logger call is charged, as a writer's opening call is.
+	{
+		Pattern: "cloud.google.com/go/logging.Client.Logger",
+		Perms:   []string{"logging.logEntries.create"},
+	},
+	{
+		Pattern: "cloud.google.com/go/logging.Logger.LogSync",
+		Perms:   []string{"logging.logEntries.create"},
+	},
+	// Ping writes an entry to check that logging works.
+	{
+		Pattern: "cloud.google.com/go/logging.Client.Ping",
+		Perms:   []string{"logging.logEntries.create"},
+	},
+	{Pattern: "cloud.google.com/go/logging.NewClient"},
+	{Pattern: "cloud.google.com/go/logging.Logger.Log"},
+	{Pattern: "cloud.google.com/go/logging.Logger.Flush"},
+	{Pattern: "cloud.google.com/go/logging.Client.Close"},
 
 	// AlloyDB connector: the dialer fetches a client certificate and the
 	// instance's connection info before each connection refresh.
@@ -729,6 +796,8 @@ func services() []struct{ prefix, service string } {
 		{"cloud.google.com/go/bigquery", "bigquery.googleapis.com"},
 		{"cloud.google.com/go/artifactregistry", "artifactregistry.googleapis.com"},
 		{"cloud.google.com/go/iam/credentials", "iamcredentials.googleapis.com"},
+		{"google.golang.org/api/impersonate", "iamcredentials.googleapis.com"},
+		{"cloud.google.com/go/logging", "logging.googleapis.com"},
 		{"cloud.google.com/go/cloudtasks", "cloudtasks.googleapis.com"},
 		{"cloud.google.com/go/profiler", "cloudprofiler.googleapis.com"},
 		{"cloud.google.com/go/alloydbconn", "alloydb.googleapis.com"},

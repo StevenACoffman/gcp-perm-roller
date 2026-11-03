@@ -215,7 +215,7 @@ func TestAnalyzeFromJSONRoundTrips(t *testing.T) {
 	ok(t, err)
 	var got gcpperms.Result
 	ok(t, json.Unmarshal([]byte(out), &got))
-	want, err := loadResults([]string{"testdata/one.json", "testdata/two.json"})
+	want, err := gcpperms.LoadResults([]string{"testdata/one.json", "testdata/two.json"})
 	ok(t, err)
 	// spec: saved results are read back as written, in file order.
 	equals(t, got, want)
@@ -433,6 +433,26 @@ func writeModule(t *testing.T) string {
 	ok(t, os.WriteFile(filepath.Join(dir, "cmd", "x", "main.go"),
 		[]byte("package main\n\nfunc main() {}\n"), 0o600))
 	return dir
+}
+
+func TestAnalyzeCancelled(t *testing.T) {
+	dir := writeModule(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// spec: an interrupted analysis fails with the cancellation as its
+	// cause, whether it was finding the modules or analyzing.
+	for name, args := range map[string][]string{
+		"every module": {"analyze", "-C", dir},
+		"a pattern":    {"analyze", "-C", dir, "./cmd/x"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := root.New(strings.NewReader(""), io.Discard, io.Discard)
+			New(r)
+			if err := r.Command.ParseAndRun(ctx, args); !errors.Is(err, context.Canceled) {
+				t.Fatalf("got %v, want context.Canceled", err)
+			}
+		})
+	}
 }
 
 func TestAnalyzePackages(t *testing.T) {

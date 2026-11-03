@@ -1,11 +1,17 @@
 package gcpperms
 
 import (
+	"fmt"
 	"go/ast"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/tools/go/ssa"
@@ -130,11 +136,43 @@ func Use() {
 func sink(any) {}
 `
 
+// stdExports maps each standard library package to its export data file,
+// as the go command reports them. importer.Default finds the standard
+// library through go/build, which needs GOROOT, and a test binary built
+// with -trimpath, as CI builds them, knows none unless $GOROOT is set; the
+// go command always knows its own. One run lists them all.
+var stdExports = sync.OnceValues(func() (map[string]string, error) {
+	out, err := exec.Command("go", "list", "-export", "-f", "{{.ImportPath}}={{.Export}}", "std").
+		Output()
+	if err != nil {
+		return nil, err
+	}
+	exports := make(map[string]string)
+	for line := range strings.Lines(string(out)) {
+		path, file, _ := strings.Cut(strings.TrimSpace(line), "=")
+		exports[path] = file
+	}
+	return exports, nil
+})
+
 // mapImporter resolves the in-memory packages in pkgs, and every other
 // import through fallback.
 type mapImporter struct {
 	fallback types.Importer
 	pkgs     map[string]*types.Package
+}
+
+// goListExport opens the export data of the standard library package path.
+func goListExport(path string) (io.ReadCloser, error) {
+	exports, err := stdExports()
+	if err != nil {
+		return nil, err
+	}
+	file, ok := exports[path]
+	if !ok {
+		return nil, fmt.Errorf("%s is not a standard library package", path)
+	}
+	return os.Open(file)
 }
 
 // buildFake type-checks and builds fakeSDK, fakeApp, and fakeCmd as SSA.
@@ -160,7 +198,10 @@ func buildSSA(t *testing.T, srcs ...[2]string) (*ssa.Program, []*ssa.Package) {
 	t.Helper()
 	fset := token.NewFileSet()
 	prog := ssa.NewProgram(fset, ssa.InstantiateGenerics)
-	imp := &mapImporter{fallback: importer.Default(), pkgs: make(map[string]*types.Package)}
+	imp := &mapImporter{
+		fallback: importer.ForCompiler(fset, "gc", goListExport),
+		pkgs:     make(map[string]*types.Package),
+	}
 	build := func(path, src string) *ssa.Package {
 		f, err := parser.ParseFile(fset, path+".go", src, 0)
 		ok(t, err)

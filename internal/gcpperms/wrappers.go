@@ -1,6 +1,7 @@
 package gcpperms
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"go/token"
@@ -67,17 +68,16 @@ type calledValue struct {
 // Only the packages the patterns name are loaded from source, so finding
 // wrappers in a large module costs far less than analyzing it. cfg.Dir,
 // Patterns, and Tags are used.
-func FindWrappers(cfg *Config) ([]Wrapper, error) {
+//
+// When ctx is cancelled, loading, nearly all of the work, stops, and no
+// search follows it; the error then matches ctx.Err() through errors.Is.
+func FindWrappers(ctx context.Context, cfg *Config) ([]Wrapper, error) {
 	const op = "gcpperms.FindWrappers"
 	root, err := filepath.Abs(cfg.Dir)
 	if err != nil {
 		return nil, errors.Wrap(err, op)
 	}
-	pkgs, err := packages.Load(&packages.Config{
-		Mode:       packages.LoadSyntax,
-		Dir:        cfg.Dir,
-		BuildFlags: []string{"-tags=" + strings.Join(cfg.Tags, ",")},
-	}, cfg.Patterns...)
+	pkgs, err := loadPackages(ctx, packages.LoadSyntax, cfg)
 	if err != nil {
 		return nil, errors.Wrap(err, op)
 	}
@@ -91,6 +91,9 @@ func FindWrappers(cfg *Config) ([]Wrapper, error) {
 	// once however many instances of it the code uses.
 	prog, ssaPkgs := ssautil.Packages(healthy, 0)
 	prog.Build()
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Wrap(err, op)
+	}
 	return findWrappers(ssaPkgs, root), nil
 }
 

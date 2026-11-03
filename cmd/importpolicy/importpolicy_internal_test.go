@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/peterbourgon/ff/v4"
 	"github.com/peterbourgon/ff/v4/ffhelp"
@@ -70,6 +71,110 @@ func TestImport(t *testing.T) {
       for datastore.entities.get, datastore.entities.list
     roles/pubsub.viewer                           Pub/Sub Viewer, 2 permissions
       for pubsub.topics.get
+`)
+}
+
+func TestImportAncestors(t *testing.T) {
+	out, err := runImport(t,
+		"--policy="+filepath.Join("testdata", "ancestors.yaml"),
+		"--member=user:ada@example.com")
+	ok(t, err)
+	// spec: grants inherited from the folder and the organization count,
+	// and say where they come from. A permission denied to the member is
+	// not counted, so no role is chosen for it; one a rule may deny is
+	// counted, with the reason.
+	equals(t, out, `== user:ada@example.com
+  Holds:
+    roles/datastore.user
+    roles/storage.objectViewer                    conditional: Logs bucket only; inherited from folders/123456789012
+    roles/pubsub.viewer                           inherited from organizations/987654321098
+  3 permissions, and 2 more under conditions
+  2 deny policies
+  Denied, so not counted:
+    pubsub.topics.list                            by No project deletion
+  Possibly denied, still counted:
+    datastore.entities.get                        by No project deletion, denied to a set of principals the member may be in
+    datastore.entities.list                       by No project deletion, denied to a set of principals the member may be in
+    storage.objects.list                          by prod-logs, only when Production only holds
+  Predefined roles (1 permissions beyond those required):
+    roles/datastore.user                          Cloud Datastore User, 2 permissions
+      for datastore.entities.get, datastore.entities.list
+    roles/pubsub.viewer                           Pub/Sub Viewer, 2 permissions
+      for pubsub.topics.get
+`)
+}
+
+func TestImportProposedPolicy(t *testing.T) {
+	proposed := filepath.Join(t.TempDir(), "proposed.json")
+	var out, errOut bytes.Buffer
+	r := root.New(strings.NewReader(""), &out, &errOut)
+	New(r)
+	err := r.Command.ParseAndRun(context.Background(), []string{
+		"import",
+		"--policy=" + filepath.Join("testdata", "policy.yaml"),
+		"--roles=" + filepath.Join("testdata", "roles.json"),
+		"--custom-roles=" + filepath.Join("testdata", "custom"),
+		"--member=user:ada@example.com",
+		"--include-conditional",
+		"--proposed-policy=" + proposed,
+	})
+	ok(t, err)
+	data, err := os.ReadFile(proposed)
+	ok(t, err)
+	policy, err := gcpperms.ParsePolicy(data)
+	ok(t, err)
+	// spec: the member holds exactly the recommended roles, and the expired
+	// binding, which grants nothing, is left alone.
+	var held []string
+	for _, b := range policy.MemberBindings("user:ada@example.com", time.Now()) {
+		held = append(held, b.Role+" "+string(b.State))
+	}
+	equals(t, held, []string{
+		"roles/datastore.user unconditional",
+		"roles/pubsub.publisher expired",
+		"roles/pubsub.viewer unconditional",
+		"roles/storage.objectViewer unconditional",
+	})
+	// spec: dropping the condition is said, on stderr; stdout has only the
+	// report.
+	equals(t, errOut.String(),
+		"import: the proposed policy drops the condition \"Logs bucket only\" of "+
+			"roles/storage.objectViewer; its roles are granted without it\n")
+	if !strings.HasPrefix(out.String(), "== user:ada@example.com\n") {
+		t.Fatalf("stdout is not the report:\n%s", out.String())
+	}
+
+	// spec: a proposal needs one project's policy and a typed member.
+	for name, args := range map[string][]string{
+		"ancestors":  {"--policy=" + filepath.Join("testdata", "ancestors.yaml"), "--member=user:ada@example.com"},
+		"bare email": {"--member=ada@example.com"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := runImport(t, append(args, "--proposed-policy="+proposed)...)
+			if err == nil {
+				t.Fatal("wrote a proposal it cannot make")
+			}
+		})
+	}
+}
+
+func TestImportAnalysis(t *testing.T) {
+	out, err := runImport(t,
+		"--policy="+filepath.Join("testdata", "analysis.yaml"),
+		"--member=user:ada@example.com")
+	ok(t, err)
+	// spec: roles held through a group count, and name the group.
+	equals(t, out, `== user:ada@example.com
+  Holds:
+    roles/datastore.user                          through group:eng@example.com
+    roles/pubsub.publisher
+    roles/storage.objectViewer                    conditional: Logs bucket only; through group:eng@example.com; inherited from folders/123456789012
+  3 permissions, and 2 more under conditions
+  Predefined roles (0 permissions beyond those required):
+    roles/datastore.user                          Cloud Datastore User, 2 permissions
+      for datastore.entities.get, datastore.entities.list
+    roles/pubsub.publisher                        Pub/Sub Publisher, 1 permissions
+      for pubsub.topics.publish
 `)
 }
 
@@ -211,5 +316,6 @@ func TestImportHelp(t *testing.T) {
 		"--custom-roles STRING",
 		"--role-stages STRING",
 		"--include-conditional",
+		"--proposed-policy STRING",
 	})
 }

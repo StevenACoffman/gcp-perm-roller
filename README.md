@@ -62,6 +62,10 @@ uppercase it, and replace dashes with underscores (`GCP_PERM_ROLLER_FORMAT=json`
 Analyzing a workspace of 20 modules takes about 90 seconds and 9 GB of memory with VTA,
 or about 45 seconds with `--algo=rta`. Patterns that match no main package are an error.
 
+Ctrl-C stops an analysis once the binaries being analyzed are done, which can take tens
+of seconds, since building a call graph cannot be interrupted. A second Ctrl-C quits at
+once. An interrupted run exits with status 130.
+
 `--outdir` names each file for the package's directory relative to `-C`, with slashes
 turned into dashes (`billing/cmd/worker` becomes `billing-cmd-worker.txt`). Each file
 starts with a `Code generated` line naming the command that reproduces it. A run also
@@ -131,6 +135,16 @@ writes one. Each role's `for` line lists the permissions it was chosen for. A ro
 for its own service may also hold other services' permissions, which count toward the
 excess unless they are required.
 
+Not every permission can go in a custom role. Google's
+[support levels for permissions in custom roles](https://docs.cloud.google.com/iam/docs/custom-roles-permissions-support)
+mark some `NOT_SUPPORTED`, which `gcloud iam roles create` rejects, and some `TESTING`,
+which work but might change. Both reports mark such permissions. `--format=role` comments
+out the unsupported ones, so gcloud still accepts the role, and marks the testing ones.
+The binary carries a copy of the levels,
+[`internal/gcpperms/support_levels.go`](internal/gcpperms/support_levels.go), and
+`go generate ./internal/gcpperms` refreshes it. A permission newer than the copy counts as
+supported.
+
 A role chosen this way can still be one meant for a Google service. For
 `storage.buckets.get` alone, the cheapest GA role is `roles/storage.insightsCollectorService`
 (4 permissions), the role of Storage Insights' inventory service. The role meant for it,
@@ -147,6 +161,28 @@ there. It chooses roles the same way as [Predefined Roles](#predefined-roles).
 gcloud projects get-iam-policy my-project > policy.yaml   # or --format=json
 gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
   --roles ~/src/iam-dataset/gcp/roles
+```
+
+To also count what the member holds on the project's folders and organization, give
+it the output of `get-ancestors-iam-policy` instead. The report names the source of each
+inherited role (`inherited from folders/123456789012`):
+
+```sh
+gcloud projects get-ancestors-iam-policy my-project > policy.yaml
+```
+
+A policy does not list a group's members, so from a policy, `import` does not count what
+a user holds through a group. Cloud Asset Inventory's analysis does: give `import` what
+`analyze-iam-policy` prints for the member, with groups expanded. Name the project with
+`--full-resource-name`, so the analysis covers the project and its ancestors, as
+`get-ancestors-iam-policy` does. Each role held through a group names the group
+(`through group:eng@example.com`). The analysis needs the Cloud Asset API enabled and
+`cloudasset.assets.analyzeIamPolicy` on the project.
+
+```sh
+gcloud asset analyze-iam-policy --project=my-project \
+  --full-resource-name=//cloudresourcemanager.googleapis.com/projects/my-project \
+  --identity=user:ada@example.com --expand-groups > policy.yaml
 ```
 
 ```text
@@ -173,6 +209,7 @@ gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
 | `--custom-roles`        | Where to read the custom roles the member holds: `api` (default) or saved JSON |
 | `--role-stages`         | A launch stage to recommend; repeatable (default `GA`)                         |
 | `--include-conditional` | Also cover the permissions held under conditions                               |
+| `--proposed-policy`     | Also write the policy with the member's roles replaced, for the simulator      |
 
 How bindings count:
 
@@ -187,10 +224,110 @@ How bindings count:
   A custom role with no definition stops the import, so its permissions are never left out
   silently.
 
-The result matches what the member holds now, not what it needs. The policy does not
-list a group's members, so a user's grants through groups are not counted; name the
-group instead. Grants inherited from the folder and organization are not in a project's
-policy (`gcloud projects get-ancestors-iam-policy` lists them).
+The result matches what the member holds now, not what it needs. From a policy rather
+than an analysis, `import` does not count a user's grants through groups. Name the group
+instead.
+
+`import` applies the deny policies that `get-ancestors-iam-policy --include-deny` adds. It
+leaves out a permission a rule denies to the member, by name or as everyone, so no chosen
+role grants it. A rule *might* deny a permission when the policy alone cannot decide: the
+rule names a group or another set of principals the member might be in, makes an
+exception for one, or has a condition, which can only test resource tags. Those
+permissions still count, and the report lists each with its reason. Deny rules name
+permissions in the v2 form of IAM (`cloudresourcemanager.googleapis.com/projects.delete`).
+[`deny_names.go`](internal/gcpperms/deny_names.go), generated with `support_levels.go`,
+maps the v1 names whose service differs from their domain.
+
+### Checking a Proposal Against Recent Access
+
+`--proposed-policy=FILE` writes the policy with the member's roles replaced by the
+recommended ones. It takes the member out of the bindings the recommendation covers, grants
+it each recommended role, and keeps everything else in the policy. Give the file to the IAM
+policy simulator, which replays up to 1,000 access attempts from the past 90 days and
+reports any the change would have denied:
+
+```sh
+gcp-perm-roller import --policy=policy.yaml --member=user:ada@example.com \
+  --proposed-policy=proposed.json
+gcloud iam simulator replay-recent-access \
+  //cloudresourcemanager.googleapis.com/projects/my-project proposed.json
+```
+
+A proposal needs one project's policy, not `get-ancestors-iam-policy` or
+`analyze-iam-policy` output, and
+`--member` with its type. The proposal grants the recommended roles without conditions, so
+the command warns on stderr about each condition it drops, such as a temporary grant's
+expiry. It also warns when some permissions need a custom role. The proposal grants none
+of them, so the simulator reports them as lost.
+
+## Checking Granted Roles
+
+After you grant the recommended roles, `gcp-perm-roller troubleshoot` asks IAM's
+[Policy Troubleshooter](https://cloud.google.com/policy-intelligence/docs/troubleshoot-access)
+whether the binaries' principal holds each permission `analyze` found. The troubleshooter
+counts inherited roles and deny policies, as IAM decides access.
+
+```sh
+gcp-perm-roller analyze -C ~/src/myworkspace --format=json > result.json
+gcp-perm-roller troubleshoot --from=result.json \
+  --principal=app@my-project.iam.gserviceaccount.com \
+  --resource=//cloudresourcemanager.googleapis.com/projects/my-project \
+  example.com/cmd/server
+```
+
+```text
+== example.com/cmd/server
+  app@my-project.iam.gserviceaccount.com on //cloudresourcemanager.googleapis.com/projects/my-project
+    CAN_ACCESS           datastore.entities.get
+    CANNOT_ACCESS        datastore.entities.update (conditional)
+  1 of 2 permissions held
+```
+
+| Flag                    | Meaning                                                           |
+| ----------------------- | ----------------------------------------------------------------- |
+| `--from`                | Results saved with `analyze --format=json`; repeatable (required) |
+| `--principal`           | The email of the service account or user (required)               |
+| `--resource`            | The full resource name to check on (required)                     |
+| `--include-conditional` | Also check the permissions needed only on some paths              |
+| `--strict`              | Exit non-zero if the principal might lack any permission          |
+| `--format`              | `text` (default) or `json`                                        |
+
+Package arguments name the binaries to check. Without them, it checks every binary in the
+results. It checks each permission once, on `--resource`. A permission a binary uses on a
+resource inside the project, such as a bucket, counts as held when the project grants it.
+The troubleshooter answers `UNKNOWN_INFO` when the caller cannot read every policy that
+decides access, and `UNKNOWN_CONDITIONAL` when a condition needs request details it lacks.
+A caller who cannot read deny policies gets `UNKNOWN_INFO` even for a permission the allow
+policies grant. The report notes `allowed; deny policies not readable` then, and
+`--strict` still counts it, since a deny policy might block it.
+
+## Comparing with Observed Usage
+
+The IAM recommender records, in its policy insights, which permissions of each role a
+member used in at most the last 90 days. `gcp-perm-roller compare-usage` compares those
+with what `analyze` found for the binaries that run as the member:
+
+```sh
+gcloud recommender insights list --insight-type=google.iam.policy.Insight \
+  --location=global --project=my-project --format=json > insights.json
+gcp-perm-roller compare-usage --from=result.json --insights=insights.json \
+  --member=serviceAccount:app@my-project.iam.gserviceaccount.com \
+  example.com/cmd/server example.com/cmd/worker
+```
+
+It sorts each permission into one of these groups:
+
+| Group                     | Meaning                                                             |
+| ------------------------- | ------------------------------------------------------------------- |
+| Used, not found           | A missing rule, a call `analyze` cannot follow, or another program  |
+| Found, not used           | A role an insight covers holds it, but nothing used it in that time |
+| Found, with no usage data | No role an insight covers holds it                                  |
+
+Name every binary that runs as the member, since the insights cannot tell them apart.
+Each insight covers one role, so `--roles` (as for `import`) says what each role holds.
+The report names an insight role with no definition, such as a custom role, and counts its
+permissions as having no usage data. The recommender's model-inferred permissions
+(`inferredPermissions`) are not counted as used.
 
 ## How It Works
 
@@ -331,6 +468,17 @@ that dataset's predefined roles, which come from the IAM roles API. It lists whe
 dataset's method map disagrees with the table, and what the dataset says about methods
 Google does not document. The map is partly hand-written and does not cite its sources,
 so the verifier reports it but never treats it as authoritative.
+
+### Weekly Drift Check
+
+Google changes its documentation, permissions, and custom-role support levels without a
+release of this tool. The [Drift workflow](.github/workflows/drift.yaml) runs every Monday,
+and on demand. It runs verify-table with `--strict` and iam-dataset against live pages,
+on the analyzer's test programs, and regenerates `support_levels.go`. It fails when
+verify-table finds a mismatch or Google's support levels changed. It changes nothing
+itself: fix the rule, or commit the regenerated file, in a pull request. The workspaces
+this tool analyzes are private, so the method check covers only the SDK calls the test
+programs make. The permission-name check covers the whole table.
 
 ## Testing
 

@@ -1,0 +1,72 @@
+---
+category: SECURITY
+content:
+  condition:
+    description: ""
+    expression: ""
+    location: ""
+    title: ""
+  currentTotalPermissionsCount: "2"
+  exercisedPermissions:
+  - permission: datastore.entities.get
+  inferredPermissions: []
+  member: serviceAccount:app@demo.iam.gserviceaccount.com
+  role: roles/datastore.user
+description: 2 permissions were used in the past 90 days.
+insightSubtype: PERMISSIONS_USAGE
+name: projects/123456789/locations/global/insightTypes/google.iam.policy.Insight/insights/1
+observationPeriod: 7776000s
+---
+category: SECURITY
+content:
+  condition:
+    description: ""
+    expression: ""
+    location: ""
+    title: ""
+  currentTotalPermissionsCount: "2"
+  exercisedPermissions:
+  - permission: storage.objects.list
+  inferredPermissions: []
+  member: serviceAccount:app@demo.iam.gserviceaccount.com
+  role: roles/storage.objectViewer
+description: 2 permissions were used in the past 90 days.
+insightSubtype: PERMISSIONS_USAGE
+name: projects/123456789/locations/global/insightTypes/google.iam.policy.Insight/insights/2
+observationPeriod: 2592000s
+---
+category: SECURITY
+content:
+  condition:
+    description: ""
+    expression: ""
+    location: ""
+    title: ""
+  currentTotalPermissionsCount: "2"
+  exercisedPermissions:
+  - permission: logging.logEntries.create
+  inferredPermissions: []
+  member: serviceAccount:app@demo.iam.gserviceaccount.com
+  role: projects/demo/roles/Custom
+description: 2 permissions were used in the past 90 days.
+insightSubtype: PERMISSIONS_USAGE
+name: projects/123456789/locations/global/insightTypes/google.iam.policy.Insight/insights/3
+observationPeriod: 7776000s
+---
+category: SECURITY
+content:
+  condition:
+    description: ""
+    expression: ""
+    location: ""
+    title: ""
+  currentTotalPermissionsCount: "2"
+  exercisedPermissions:
+  - permission: pubsub.topics.publish
+  inferredPermissions: []
+  member: user:ada@example.com
+  role: roles/pubsub.publisher
+description: 2 permissions were used in the past 90 days.
+insightSubtype: PERMISSIONS_USAGE
+name: projects/123456789/locations/global/insightTypes/google.iam.policy.Insight/insights/4
+observationPeriod: 7776000s
