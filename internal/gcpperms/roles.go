@@ -62,6 +62,9 @@ type RoleSelection struct {
 	// Uncovered are required permissions no allowed predefined role grants;
 	// they need a custom role.
 	Uncovered []string `json:"uncovered,omitempty"`
+	// CustomRoleSupport is the support level of each uncovered permission
+	// that a custom role cannot hold, or holds only while Google tests it.
+	CustomRoleSupport map[string]SupportLevel `json:"customRoleSupport,omitempty"`
 	// Inexact is set when part of the problem was too large to solve
 	// exactly and a greedy choice was made instead.
 	Inexact bool `json:"inexact,omitempty"`
@@ -293,8 +296,15 @@ func SelectRoles(required []string, roles []Role, filter RoleFilter) RoleSelecti
 		covered.or(c.set)
 	}
 	for i, p := range need {
-		if !covered.has(i) {
-			sel.Uncovered = append(sel.Uncovered, p)
+		if covered.has(i) {
+			continue
+		}
+		sel.Uncovered = append(sel.Uncovered, p)
+		if level := CustomRoleSupport(p); level != Supported {
+			if sel.CustomRoleSupport == nil {
+				sel.CustomRoleSupport = make(map[string]SupportLevel)
+			}
+			sel.CustomRoleSupport[p] = level
 		}
 	}
 

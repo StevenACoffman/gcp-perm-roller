@@ -51,6 +51,8 @@ func WriteJSON(w io.Writer, v any) error {
 // WriteRoles writes one IAM custom role definition per binary, in the YAML
 // format accepted by `gcloud iam roles create --file`. Conditional
 // permissions are included so the role works on every path; review them.
+// Permissions custom roles do not support are commented out, and those
+// Google is testing in custom roles are marked.
 func WriteRoles(w io.Writer, bins []Binary) error {
 	ew := &errWriter{w: w}
 	var n int
@@ -76,11 +78,7 @@ func WriteRoles(w io.Writer, bins []Binary) error {
 			isCond[p] = true
 		}
 		for _, p := range all {
-			if isCond[p] {
-				ew.printf("- %s # conditional\n", p)
-			} else {
-				ew.printf("- %s\n", p)
-			}
+			ew.printf("%s\n", roleItem(p, isCond[p]))
 		}
 	}
 	return ew.err
@@ -217,12 +215,47 @@ func writeSelection(ew *errWriter, sel *RoleSelection) {
 	if len(sel.Uncovered) > 0 {
 		ew.printf("  Granted by no allowed predefined role (use a custom role):\n")
 		for _, p := range sel.Uncovered {
-			ew.printf("    %s\n", p)
+			if level, ok := sel.CustomRoleSupport[p]; ok {
+				ew.printf("    %-45s %s\n", p, supportNote(level))
+			} else {
+				ew.printf("    %s\n", p)
+			}
 		}
 	}
 	if sel.Inexact {
 		ew.printf("  Some roles were chosen greedily; a smaller set may exist.\n")
 	}
+}
+
+// roleItem is perm's line in a role's includedPermissions, with notes on
+// whether it is conditional and how custom roles support it. gcloud
+// rejects a role holding an unsupported permission, so that line is
+// commented out, but kept in sight.
+func roleItem(perm string, conditional bool) string {
+	var notes []string
+	if conditional {
+		notes = append(notes, "conditional")
+	}
+	level := CustomRoleSupport(perm)
+	if level != Supported {
+		notes = append(notes, supportNote(level))
+	}
+	item := "- " + perm
+	if level == NotSupported {
+		item = "# " + item
+	}
+	if len(notes) > 0 {
+		item += " # " + strings.Join(notes, "; ")
+	}
+	return item
+}
+
+// supportNote says what level means for a permission in a custom role.
+func supportNote(level SupportLevel) string {
+	if level == NotSupported {
+		return "not supported in custom roles"
+	}
+	return "testing in custom roles"
 }
 
 // bindingNote says when a held binding applies, naming its condition.

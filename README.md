@@ -135,6 +135,16 @@ writes one. Each role's `for` line lists the permissions it was chosen for. A ro
 for its own service may also hold other services' permissions, which count toward the
 excess unless they are required.
 
+Not every permission can go in a custom role. Google's
+[support levels for permissions in custom roles](https://docs.cloud.google.com/iam/docs/custom-roles-permissions-support)
+mark some `NOT_SUPPORTED`, which `gcloud iam roles create` rejects, and some `TESTING`,
+which work but might change. Both reports mark such permissions. `--format=role` comments
+out the unsupported ones, so gcloud still accepts the role, and marks the testing ones.
+The binary carries a copy of the levels,
+[`internal/gcpperms/support_levels.go`](internal/gcpperms/support_levels.go), and
+`go generate ./internal/gcpperms` refreshes it. A permission newer than the copy counts as
+supported.
+
 A role chosen this way can still be one meant for a Google service. For
 `storage.buckets.get` alone, the cheapest GA role is `roles/storage.insightsCollectorService`
 (4 permissions), the role of Storage Insights' inventory service. The role meant for it,
