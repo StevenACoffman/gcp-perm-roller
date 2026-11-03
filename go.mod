@@ -2,6 +2,8 @@ module github.com/StevenACoffman/gcp-perm-roller
 
 go 1.27.1
 
+toolchain go1.27.3
+
 require (
 	cloud.google.com/go/datastore v1.28.0
 	cloud.google.com/go/secretmanager v1.23.0

@@ -31,7 +31,7 @@ jobs:
         persist-credentials: "false"
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: "1.27"
+        go-version: "1.27.3"
     - name: Mutate the lines this pull request changed
       # Scoped to changed lines because mutating internal/gcpperms alone runs the suite once
       # per mutant for over two hours, which is minutes of CI for a result nobody reads on
