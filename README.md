@@ -377,6 +377,17 @@ dataset's method map disagrees with the table, and what the dataset says about m
 Google does not document. The map is partly hand-written and does not cite its sources,
 so the verifier reports it but never treats it as authoritative.
 
+### Weekly Drift Check
+
+Google changes its documentation, permissions, and custom-role support levels without a
+release of this tool. The [Drift workflow](.github/workflows/drift.yaml) runs every Monday,
+and on demand. It runs verify-table with `--strict` and iam-dataset against live pages,
+on the analyzer's test programs, and regenerates `support_levels.go`. It fails when
+verify-table finds a mismatch or Google's support levels changed. It changes nothing
+itself: fix the rule, or commit the regenerated file, in a pull request. The workspaces
+this tool analyzes are private, so the method check covers only the SDK calls the test
+programs make. The permission-name check covers the whole table.
+
 ## Testing
 
 The [`justfile`](justfile) has a recipe for each of these; `just` lists them.
