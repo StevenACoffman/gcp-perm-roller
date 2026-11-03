@@ -1,0 +1,77 @@
+# Google changes its documentation, its permissions, and its custom-role support levels
+# without a release of this tool, so the permission table and support_levels.go go
+# stale silently. This workflow checks both against Google's current pages once a week.
+# It changes nothing: a failure means a rule or the generated list needs updating, in a
+# pull request. GitHub disables scheduled workflows after 60 days without a push.
+name: Drift
+on:
+  schedule:
+  # Mondays at 06:17 UTC: off the hour, when scheduled runs queue longest.
+  - cron: "17 6 * * 1"
+  workflow_dispatch:
+permissions: {}
+env:
+  GOFLAGS: "-trimpath"
+jobs:
+  table:
+    # The same check as `just verify-table`, against live pages instead of the recorded
+    # ones TestRunMatchesGolden uses. Check 1 covers every permission in the table; check 2
+    # covers the SDK calls the analyzer's test programs make, since the workspaces this
+    # tool is used on are private.
+    name: Permission table against the docs
+    runs-on: ubuntu-latest
+    # About a minute of fetching and call-graph building; the ceiling is against a hang.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Check out iam-dataset
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: iann0036/iam-dataset
+        # The leading underscore keeps the go command from ever treating it as a package.
+        path: _iam-dataset
+        persist-credentials: false
+    - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      with:
+        cache: true
+    - name: Verify the table
+      run: |
+        go run . verify-table -C . --strict --iam-dataset _iam-dataset \
+          ./internal/gcpperms/testdata/app ./internal/gcpperms/testdata/adapter \
+          >table-report.md
+    - name: Summarize the report
+      if: always()
+      run: cat table-report.md >>"$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      if: always()
+      with:
+        name: table-report
+        path: table-report.md
+        retention-days: 30
+
+  support-levels:
+    name: Permission support lists
+    runs-on: ubuntu-latest
+    # One page fetch; the ceiling is against a hang.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      with:
+        cache: true
+    - name: Regenerate support_levels.go and deny_names.go
+      run: go generate ./internal/gcpperms
+    - name: Fail if Google's lists changed
+      run: |
+        if ! git diff --exit-code internal/gcpperms/support_levels.go internal/gcpperms/deny_names.go; then
+          echo "::error::Google changed its permission support lists. Run 'go generate ./internal/gcpperms' and commit the result."
+          exit 1
+        fi

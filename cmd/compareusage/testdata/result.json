@@ -1,0 +1,25 @@
+{
+  "binaries": [
+    {
+      "package": "example.com/cmd/server",
+      "calls": [
+        {
+          "api": "cloud.google.com/go/datastore.Client.Get",
+          "mapped": true,
+          "permissions": ["datastore.entities.get"],
+          "conditional": ["datastore.entities.update"]
+        }
+      ]
+    },
+    {
+      "package": "example.com/cmd/worker",
+      "calls": [
+        {
+          "api": "cloud.google.com/go/pubsub.Topic.Publish",
+          "mapped": true,
+          "permissions": ["pubsub.topics.publish"]
+        }
+      ]
+    }
+  ]
+}

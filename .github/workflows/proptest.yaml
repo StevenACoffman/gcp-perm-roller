@@ -32,4 +32,8 @@ jobs:
         go-version: "1.27"
     - name: Check the properties
       # -short skips the end-to-end analyzer test, which has no properties and loads the SDK.
-      run: go test -short ./internal/... -rapid.checks=1000
+      # -rapid.checks is rapid's flag, so only test binaries that import rapid accept it.
+      run: |
+        pkgs=$(go list -f '{{.ImportPath}} {{join .TestImports " "}} {{join .XTestImports " "}}' ./internal/... |
+          awk '/pgregory\.net\/rapid/ {print $1}')
+        go test -short $pkgs -rapid.checks=1000

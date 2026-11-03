@@ -51,6 +51,8 @@ func WriteJSON(w io.Writer, v any) error {
 // WriteRoles writes one IAM custom role definition per binary, in the YAML
 // format accepted by `gcloud iam roles create --file`. Conditional
 // permissions are included so the role works on every path; review them.
+// Permissions custom roles do not support are commented out, and those
+// Google is testing in custom roles are marked.
 func WriteRoles(w io.Writer, bins []Binary) error {
 	ew := &errWriter{w: w}
 	var n int
@@ -76,11 +78,7 @@ func WriteRoles(w io.Writer, bins []Binary) error {
 			isCond[p] = true
 		}
 		for _, p := range all {
-			if isCond[p] {
-				ew.printf("- %s # conditional\n", p)
-			} else {
-				ew.printf("- %s\n", p)
-			}
+			ew.printf("%s\n", roleItem(p, isCond[p]))
 		}
 	}
 	return ew.err
@@ -107,7 +105,8 @@ func WriteMemberAccess(w io.Writer, a *MemberAccess) error {
 	ew := &errWriter{w: w}
 	ew.printf("== %s\n", a.Member)
 	ew.printf("  Holds:\n")
-	for _, b := range a.Bindings {
+	for i := range a.Bindings {
+		b := &a.Bindings[i]
 		if note := bindingNote(b); note != "" {
 			ew.printf("    %-45s %s\n", b.Role, note)
 		} else {
@@ -119,6 +118,7 @@ func WriteMemberAccess(w io.Writer, a *MemberAccess) error {
 		ew.printf(", and %d more under conditions", n)
 	}
 	ew.printf("\n")
+	writeDenials(ew, a)
 	writeSelection(ew, a.PredefinedRoles)
 	return ew.err
 }
@@ -198,6 +198,40 @@ func writeSites(ew *errWriter, calls []Call) {
 	}
 }
 
+// writeDenials writes how a's deny policies deny its permissions: those
+// they deny, which are not counted, and those they may deny, which are.
+func writeDenials(ew *errWriter, a *MemberAccess) {
+	if a.DenyPolicies == 0 {
+		return
+	}
+	ew.printf("  %d deny policies\n", a.DenyPolicies)
+	var certain, possible []Denial
+	for _, d := range a.Denials {
+		if d.Certain {
+			certain = append(certain, d)
+		} else {
+			possible = append(possible, d)
+		}
+	}
+	writeDenialList(ew, "Denied, so not counted:", certain)
+	writeDenialList(ew, "Possibly denied, still counted:", possible)
+}
+
+// writeDenialList writes denials under title, if there are any.
+func writeDenialList(ew *errWriter, title string, denials []Denial) {
+	if len(denials) == 0 {
+		return
+	}
+	ew.printf("  %s\n", title)
+	for _, d := range denials {
+		note := "by " + d.Policy
+		if d.Reason != "" {
+			note += ", " + d.Reason
+		}
+		ew.printf("    %-45s %s\n", d.Permission, note)
+	}
+}
+
 // writeSelection writes one binary's predefined roles.
 func writeSelection(ew *errWriter, sel *RoleSelection) {
 	if sel == nil || len(sel.Grants)+len(sel.Uncovered) == 0 {
@@ -217,7 +251,11 @@ func writeSelection(ew *errWriter, sel *RoleSelection) {
 	if len(sel.Uncovered) > 0 {
 		ew.printf("  Granted by no allowed predefined role (use a custom role):\n")
 		for _, p := range sel.Uncovered {
-			ew.printf("    %s\n", p)
+			if level, ok := sel.CustomRoleSupport[p]; ok {
+				ew.printf("    %-45s %s\n", p, supportNote(level))
+			} else {
+				ew.printf("    %s\n", p)
+			}
 		}
 	}
 	if sel.Inexact {
@@ -225,24 +263,64 @@ func writeSelection(ew *errWriter, sel *RoleSelection) {
 	}
 }
 
-// bindingNote says when a held binding applies, naming its condition.
-func bindingNote(b HeldBinding) string {
-	if b.Condition == nil {
-		return ""
+// roleItem is perm's line in a role's includedPermissions, with notes on
+// whether it is conditional and how custom roles support it. gcloud
+// rejects a role holding an unsupported permission, so that line is
+// commented out, but kept in sight.
+func roleItem(perm string, conditional bool) string {
+	var notes []string
+	if conditional {
+		notes = append(notes, "conditional")
 	}
-	name := b.Condition.Title
-	if name == "" {
-		name = b.Condition.Expression
+	level := CustomRoleSupport(perm)
+	if level != Supported {
+		notes = append(notes, supportNote(level))
 	}
-	switch b.State {
+	item := "- " + perm
+	if level == NotSupported {
+		item = "# " + item
+	}
+	if len(notes) > 0 {
+		item += " # " + strings.Join(notes, "; ")
+	}
+	return item
+}
+
+// supportNote says what level means for a permission in a custom role.
+func supportNote(level SupportLevel) string {
+	if level == NotSupported {
+		return "not supported in custom roles"
+	}
+	return "testing in custom roles"
+}
+
+// bindingNote says when a held binding applies, naming its condition, the
+// groups it is held through, and where it is inherited from.
+func bindingNote(b *HeldBinding) string {
+	var notes []string
+	if b.Condition != nil {
+		notes = append(notes, conditionNote(b.State)+": "+b.Condition.Name())
+	}
+	if len(b.Through) > 0 {
+		notes = append(notes, "through "+strings.Join(b.Through, ", "))
+	}
+	if b.Resource != "" {
+		notes = append(notes, "inherited from "+b.Resource)
+	}
+	return strings.Join(notes, "; ")
+}
+
+// conditionNote names the state of a binding that has a condition.
+func conditionNote(state ConditionState) string {
+	switch state {
 	case Unconditional:
-		return "temporary: " + name
+		return "temporary"
 	case Expired:
-		return "expired: " + name
+		return "expired"
 	case Conditional:
-		return "conditional: " + name
+		return "conditional"
 	}
-	return string(b.State) + ": " + name
+	return string(state)
 }
 
 // shortAPI trims the import path to its last unversioned element:
