@@ -53,7 +53,8 @@ test-short:
 #
 # Run the rapid properties with more attempts than the default
 proptest checks="1000":
-    go test ./internal/... -rapid.checks={{checks}}
+    # -rapid.checks is rapid's flag, so only test binaries that import rapid accept it.
+    go test $(go list -f '{{{{.ImportPath}} {{{{join .TestImports " "}} {{{{join .XTestImports " "}}' ./internal/... | awk '/pgregory\.net\/rapid/ {print $1}') -rapid.checks={{checks}}
 
 # Run the suite with a coverage report (a report for humans, not a gate)
 test-cover:
