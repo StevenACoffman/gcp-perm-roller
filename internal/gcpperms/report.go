@@ -310,15 +310,11 @@ func bindingNote(b *HeldBinding) string {
 	return strings.Join(notes, "; ")
 }
 
-// conditionNote names the state of a binding that has a condition.
+// conditionNote names the state of a binding that has a condition: one
+// that only limits time and has not expired is temporary.
 func conditionNote(state ConditionState) string {
-	switch state {
-	case Unconditional:
+	if state == Unconditional {
 		return "temporary"
-	case Expired:
-		return "expired"
-	case Conditional:
-		return "conditional"
 	}
 	return string(state)
 }
