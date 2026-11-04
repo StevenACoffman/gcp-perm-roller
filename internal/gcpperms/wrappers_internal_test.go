@@ -102,6 +102,15 @@ func Thunk(err error) string {
 func use() {
 	Instanced[int](func() {})
 }
+
+// Literal holds a function literal that calls its own parameter by
+// reflection, which is no declared function and so no wrapper, and a
+// closure that calls Call, whose call is counted once.
+func Literal() {
+	call := func(f any) { reflect.ValueOf(f).Call(nil) }
+	call(Literal)
+	func() { Call(Literal) }()
+}
 `
 
 // fakeOther is a wrapper in a package findWrappers is not asked about.
@@ -138,10 +147,11 @@ func TestFindWrappersInSSA(t *testing.T) {
 	// built with it; a reflect.Value not made from a parameter, functions
 	// named like reflect's, and wrappers in packages not asked about are not
 	// wrappers; a generic wrapper's calls are counted once, not again in its
-	// instances.
+	// instances; a function literal is not a wrapper, and a call in a
+	// closure is counted once.
 	equals(t, got, []found{
 		{w + "Atop", []int{0}, 0, reason("0", "through bHelp")},
-		{w + "Call", []int{0}, 1, reason("0", direct)},
+		{w + "Call", []int{0}, 2, reason("0", direct)},
 		{w + "Closures", []int{0}, 0, reason("0", direct)},
 		{w + "Deferred", []int{0}, 0, reason("0", direct)},
 		{w + "Either", []int{0, 1}, 0, reason("0, 1", direct)},
