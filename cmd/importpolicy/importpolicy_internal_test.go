@@ -119,6 +119,10 @@ func TestImportProposedPolicy(t *testing.T) {
 		"--proposed-policy=" + proposed,
 	})
 	ok(t, err)
+	// spec: the proposal, a whole IAM policy, is readable by its owner only.
+	info, err := os.Stat(proposed)
+	ok(t, err)
+	equals(t, info.Mode().Perm(), os.FileMode(0o600))
 	data, err := os.ReadFile(proposed)
 	ok(t, err)
 	policy, err := gcpperms.ParsePolicy(data)
@@ -265,6 +269,13 @@ func TestImportErrors(t *testing.T) {
 			args: []string{"--member=user:ada@example.com", "--custom-roles=testdata/nope"},
 			want: "import: loading custom roles: ",
 		},
+		"an unwritable proposal": {
+			args: []string{
+				"--member=user:ada@example.com",
+				"--proposed-policy=" + filepath.Join(t.TempDir(), "missing", "proposed.json"),
+			},
+			want: "import: writing the proposed policy: ",
+		},
 		// spec: a custom role with no definition stops the import rather
 		// than leaving its permissions out.
 		"an undefined custom role": {
@@ -318,4 +329,34 @@ func TestImportHelp(t *testing.T) {
 		"--include-conditional",
 		"--proposed-policy STRING",
 	})
+}
+
+func TestImportProposedPolicyUncovered(t *testing.T) {
+	dir := t.TempDir()
+	// The roles of testdata/roles.json but Pub/Sub Viewer, so no predefined
+	// role grants pubsub.topics.get, which ada's custom role does.
+	roles := filepath.Join(dir, "roles.json")
+	ok(t, os.WriteFile(roles, []byte(`[
+  {"name": "roles/datastore.user", "title": "Cloud Datastore User", "stage": "GA",
+   "includedPermissions": ["datastore.entities.get", "datastore.entities.list"]},
+  {"name": "roles/pubsub.publisher", "title": "Pub/Sub Publisher", "stage": "GA",
+   "includedPermissions": ["pubsub.topics.publish"]},
+  {"name": "roles/storage.objectViewer", "title": "Storage Object Viewer", "stage": "GA",
+   "includedPermissions": ["storage.objects.get", "storage.objects.list"]}
+]`), 0o600))
+	var errOut bytes.Buffer
+	r := root.New(strings.NewReader(""), io.Discard, &errOut)
+	New(r)
+	ok(t, r.Command.ParseAndRun(context.Background(), []string{
+		"import",
+		"--policy=" + filepath.Join("testdata", "policy.yaml"),
+		"--roles=" + roles,
+		"--custom-roles=" + filepath.Join("testdata", "custom"),
+		"--member=user:ada@example.com",
+		"--proposed-policy=" + filepath.Join(dir, "proposed.json"),
+	}))
+	// spec: the proposal says it leaves out what only a custom role grants,
+	// even a single permission.
+	equals(t, errOut.String(),
+		"import: the proposed policy grants none of the 1 permissions that need a custom role\n")
 }

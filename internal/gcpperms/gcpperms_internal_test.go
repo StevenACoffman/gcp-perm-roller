@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -173,11 +174,24 @@ func TestAnalyzeWrappers(t *testing.T) {
 
 func TestFindWrappers(t *testing.T) {
 	const pkg = "github.com/StevenACoffman/gcp-perm-roller/internal/gcpperms/testdata/wrappers"
+	// The wrappers command writes its JSON to stdout, so FindWrappers must
+	// write nothing there.
+	stdout := os.Stdout
+	r, wr, err := os.Pipe()
+	ok(t, err)
+	os.Stdout = wr
 	got, err := FindWrappers(
 		context.Background(),
-		&Config{Dir: ".", Patterns: []string{"./testdata/wrappers"}},
+		&Config{Dir: ".", Patterns: []string{"./testdata/wrappers", "./testdata/brokenwrapper"}},
 	)
+	os.Stdout = stdout
+	ok(t, wr.Close())
+	printed, readErr := io.ReadAll(r)
+	ok(t, readErr)
 	ok(t, err)
+	// spec: nothing is printed, and a package that does not type-check is
+	// skipped.
+	equals(t, string(printed), "")
 	type found struct {
 		function string
 		params   []int

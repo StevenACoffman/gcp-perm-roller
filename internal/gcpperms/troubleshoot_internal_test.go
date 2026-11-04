@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,6 +35,10 @@ func TestNewTroubleshooter(t *testing.T) {
 		asked = append(asked, a.Principal+" "+a.FullResourceName+" "+a.Permission)
 		if a.Permission == "secret.things.get" {
 			http.Error(w, `{"error": {"code": 403, "message": "denied"}}`, http.StatusForbidden)
+			return
+		}
+		if a.Permission == "plain.things.get" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"overallAccessState": "CAN_ACCESS"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -67,6 +72,18 @@ func TestNewTroubleshooter(t *testing.T) {
 		asked,
 		[]string{"app@demo.iam.gserviceaccount.com " + project + " datastore.entities.get"},
 	)
+
+	// spec: a response with no explanations has only the overall state.
+	v, err = ts(ctx, "app@demo.iam.gserviceaccount.com", project, "plain.things.get")
+	ok(t, err)
+	equals(t, v, Verdict{State: CanAccess})
+
+	// spec: a service that cannot be made is an error.
+	if _, err := NewTroubleshooter(
+		ctx, option.WithAuthCredentialsFile(option.ServiceAccount, "testdata/nope.json"),
+	); err == nil {
+		t.Fatal("NewTroubleshooter with unreadable credentials returned no error")
+	}
 
 	// spec: an API error says which permission it was for.
 	_, err = ts(ctx, "app@demo.iam.gserviceaccount.com", project, "secret.things.get")
@@ -131,4 +148,80 @@ func TestCheckAccess(t *testing.T) {
 	got, err = CheckAccess(context.Background(), ts, "sa@x", "//r", bins[:1], false)
 	ok(t, err)
 	equals(t, len(got[0].Checks), 2)
+}
+
+func TestCheckAccessStopsAtAnError(t *testing.T) {
+	errAPI := errors.New("API down")
+	bins := []Binary{
+		{Package: "example.com/one", Calls: []Call{{API: "x", Permissions: []string{"a.b.get"}}}},
+		{Package: "example.com/two", Calls: []Call{{API: "y", Permissions: []string{"a.b.list"}}}},
+	}
+	var asked []string
+	ts := func(_ context.Context, _, _, perm string) (Verdict, error) {
+		asked = append(asked, perm)
+		if perm == "a.b.get" {
+			return Verdict{}, errAPI
+		}
+		return Verdict{State: CanAccess}, nil
+	}
+	got, err := CheckAccess(context.Background(), ts, "sa@x", "//r", bins, false)
+	// spec: the first failed check is the error, with no partial result,
+	// and nothing more is asked.
+	if !errors.Is(err, errAPI) {
+		t.Fatalf("got %v, want %v", err, errAPI)
+	}
+	equals(t, len(got), 0)
+	equals(t, asked, []string{"a.b.get"})
+}
+
+func TestWriteAccessChecksSeparatesBinaries(t *testing.T) {
+	var buf bytes.Buffer
+	ok(t, WriteAccessChecks(&buf, []BinaryAccess{
+		{Package: "example.com/one", Principal: "sa@x", Resource: "//r", Checks: []AccessCheck{
+			// spec: a grant gets no note when the deny policies were read.
+			{
+				Permission: "a.b.get",
+				Verdict:    Verdict{State: CanAccess, Allow: "ALLOW_ACCESS_STATE_GRANTED"},
+			},
+		}},
+		{Package: "example.com/two", Principal: "sa@x", Resource: "//r", Checks: []AccessCheck{
+			// spec: an unreadable deny policy with no grant gets no note.
+			{
+				Permission: "a.b.list",
+				Verdict:    Verdict{State: UnknownInfo, Allow: "ALLOW_ACCESS_STATE_NOT_GRANTED"},
+			},
+		}},
+	}))
+	// spec: binaries are separated by a blank line.
+	equals(t, buf.String(), `== example.com/one
+  sa@x on //r
+    CAN_ACCESS           a.b.get
+  1 of 1 permissions held
+
+== example.com/two
+  sa@x on //r
+    UNKNOWN_INFO         a.b.list
+  0 of 1 permissions held
+`)
+}
+
+func TestWriteAccessChecksReportsWriteErrors(t *testing.T) {
+	access := []BinaryAccess{{
+		Package: "example.com/one", Principal: "sa@x", Resource: "//r",
+		Checks: []AccessCheck{{Permission: "a.b.get", Verdict: Verdict{State: CanAccess}}},
+	}}
+	var full bytes.Buffer
+	ok(t, WriteAccessChecks(&full, access))
+	// spec: a write failure at any point is returned, not swallowed.
+	for limit := range full.Len() {
+		if err := WriteAccessChecks(
+			&failingWriter{limit: limit},
+			access,
+		); !errors.Is(
+			err,
+			errWrite,
+		) {
+			t.Fatalf("with a writer failing after %d bytes, got %v", limit, err)
+		}
+	}
 }

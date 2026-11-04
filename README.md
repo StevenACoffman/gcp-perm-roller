@@ -576,6 +576,39 @@ In `roles.go`:
 - Two weaken union-find (path compression, and linking a permission to itself); grouping
   only splits the search, so a coarser grouping finds the same roles.
 
+In the rest of `internal/gcpperms`:
+
+- In `deny.go`, two return `0` in place of `noMatch`, which is `0`. One drops the
+  `principal://iam.googleapis.com/projects/` prefix check for a service account, which
+  other principals with `/serviceAccounts/` in them could only fail if a pool were named
+  `serviceAccounts`.
+- In `gcpperms.go`, five skip stopping on cancellation: two drop the error guard after
+  the workers, one drops the context of `packages.Load`, and two drop the returns of a
+  worker that finds the context done. The tests cannot time a cancellation to land
+  between those checks and the next one.
+- In `policy.go`, two drop the error after unmarshalling JSON that `YAMLToJSON` or an
+  earlier unmarshal already accepted. Three weaken the check for an entry with a type
+  and a policy, which only input that gcloud never prints would reach.
+- In `proposal.go`, two drop the error from `WriteJSON` of a document just unmarshalled
+  from JSON.
+- In `usage.go`, two set an entry of a map used as a set to `false`; only its keys count.
+
+The same file records the mutants `just mutate-all` finds in the other packages:
+
+- In `cmd`, 18 replace `%w` with `%v` in errors no caller unwraps. One returns nil from
+  `compare-usage`'s register function, whose result is not read. Two fetch custom roles
+  when none are missing, which fetches nothing.
+- In `gensupport`, 16 change `main`, which writes files and exits. Nine change the error
+  paths of rendering, formatting, and reading a response, which a test could only reach
+  by replacing the standard library, and five more replace `%w` with `%v`. Two pass `-2`
+  for `-1` to `FindAllSubmatch`; both mean all matches. One keeps deny names that match
+  no single permission under the name "". Every page lists more of those than one, so ""
+  is always ambiguous and is dropped.
+
+The tables gensupport writes carry a `mutator-disable-regexp` annotation, for the same
+reason as the permission table: a mutant that blanks an entry can only be caught by a
+test that restates Google's page.
+
 Keep `--timeout-coefficient` high. Each mutant reruns the end-to-end test, which
 loads the SDK. With parallel workers, a low coefficient times out mutants that
 would have survived, and mutago counts timeouts as kills. A coefficient of 4

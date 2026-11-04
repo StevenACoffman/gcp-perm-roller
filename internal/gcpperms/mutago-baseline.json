@@ -2,6 +2,120 @@
   "version": 1,
   "mutants": [
     {
+      "id": "6ac37b1ded01675eea914df6ccff58ab",
+      "file": "cmd/compareusage/compareusage.go",
+      "mutator": "statement/return",
+      "line": 84
+    },
+    {
+      "id": "3f8dab90c10d327e6e600e9f2fa6200a",
+      "file": "cmd/compareusage/compareusage.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 89
+    },
+    {
+      "id": "f262fe888a62f00de8372164dd581fba",
+      "file": "cmd/compareusage/compareusage.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 93
+    },
+    {
+      "id": "daad7adad040151b0b286cf61877d92a",
+      "file": "cmd/compareusage/compareusage.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 101
+    },
+    {
+      "id": "4e72a6e820e1500383626489fc461d5a",
+      "file": "cmd/compareusage/compareusage.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 105
+    },
+    {
+      "id": "9405f7f931d13242ac772e9636899183",
+      "file": "cmd/compareusage/compareusage.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 109
+    },
+    {
+      "id": "24fa393139d2bb285f2683288ea47b2b",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 130
+    },
+    {
+      "id": "3d22e162f4d175648113734bb473ddc1",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 140
+    },
+    {
+      "id": "08f860d7e28af7ec77709bacfa9a4365",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 173
+    },
+    {
+      "id": "cb1de26222b1b01d835ae122cef5a601",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 177
+    },
+    {
+      "id": "4d058b19d2573a294093929ff424d02d",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/comparison",
+      "line": 201
+    },
+    {
+      "id": "1f100cbfd22bdf10fce78787ac33510c",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "numbers/decrementer",
+      "line": 201
+    },
+    {
+      "id": "95872daf0dc1199535d293f7c684e944",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 233
+    },
+    {
+      "id": "558e259877182989b8d85b1382811979",
+      "file": "cmd/importpolicy/importpolicy.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 236
+    },
+    {
+      "id": "cc17f63f6413a5f8cda42547a7162171",
+      "file": "cmd/troubleshoot/troubleshoot.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 87
+    },
+    {
+      "id": "2b327a50870bfbd690a366122db423e1",
+      "file": "cmd/troubleshoot/troubleshoot.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 91
+    },
+    {
+      "id": "90ffd9141be2abef947de2bfeab2b0cc",
+      "file": "internal/gcpperms/deny.go",
+      "mutator": "statement/return",
+      "line": 197
+    },
+    {
+      "id": "d111ebe279c07d645ab87c8cd77d0952",
+      "file": "internal/gcpperms/deny.go",
+      "mutator": "statement/return",
+      "line": 207
+    },
+    {
+      "id": "e2474050ad32d3039c87631e4e773335",
+      "file": "internal/gcpperms/deny.go",
+      "mutator": "expression/remove",
+      "line": 217
+    },
+    {
       "id": "289cdd61032c6f88493fd9f33d92f649",
       "file": "internal/gcpperms/gcpperms.go",
       "mutator": "numbers/decrementer",
@@ -26,10 +140,250 @@
       "line": 247
     },
     {
+      "id": "cf29fcb7866927735a35b5dee62d38bc",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "expression/error-guard",
+      "line": 279
+    },
+    {
+      "id": "5340142fee365a3f3ff8fbbdd749ac65",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "composite/field-clear",
+      "line": 295
+    },
+    {
       "id": "84c8525c8c44ebc1a8b1617099c5101b",
       "file": "internal/gcpperms/gcpperms.go",
       "mutator": "statement/defer-remove",
       "line": 330
+    },
+    {
+      "id": "70b6f4579e448948723cd12051d4dc13",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "select/case-remove",
+      "line": 374
+    },
+    {
+      "id": "40c3a0a695ff80b97e7218c9a1a4f660",
+      "file": "internal/gcpperms/gcpperms.go",
+      "mutator": "branch/if",
+      "line": 381
+    },
+    {
+      "id": "7e9e097a51f67aeb643b72bbb9745b6c",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "statement/remove",
+      "line": 76
+    },
+    {
+      "id": "0e1c6ee9493c62b5d9f50aed6351d767",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "loop/range_break",
+      "line": 77
+    },
+    {
+      "id": "8382df1067f99cc3e5c50aad08024bed",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "conditional/negated",
+      "line": 78
+    },
+    {
+      "id": "191082d04c26e12b9ce963ae2cfa5c73",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/error-guard",
+      "line": 78
+    },
+    {
+      "id": "e4e029bd58507af3f6c7375d6fefab22",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "branch/if",
+      "line": 79
+    },
+    {
+      "id": "fc0e57586d68da85f27670c497504c61",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "loop/break",
+      "line": 79
+    },
+    {
+      "id": "0ba95991fa336f95f0e13548f9153c10",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "numbers/decrementer",
+      "line": 81
+    },
+    {
+      "id": "99ee6594cbc3b3c8269bea477ce80e25",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "numbers/incrementer",
+      "line": 81
+    },
+    {
+      "id": "c03b6ea9bb9a8f87fbe2bb71db5de1b9",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "statement/remove",
+      "line": 81
+    },
+    {
+      "id": "8af146a8f383b2e3cf6985a776310cdf",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "conditional/negated",
+      "line": 83
+    },
+    {
+      "id": "5d946c0e49ce437c13e7811016b5cbb6",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/error-guard",
+      "line": 83
+    },
+    {
+      "id": "fba0b280b898ccf3e6c2c28952541564",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "branch/if",
+      "line": 84
+    },
+    {
+      "id": "d296a99a824d5920ed1ac4c3c72ff84c",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "statement/remove",
+      "line": 84
+    },
+    {
+      "id": "08cfeea61125c6b4ce89f57a7ece5cd4",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "numbers/decrementer",
+      "line": 85
+    },
+    {
+      "id": "90d67421f2e49e8c4f11d3a122737b6c",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "numbers/incrementer",
+      "line": 85
+    },
+    {
+      "id": "7f81dcf0b8532a87fbc830ba0a4f4ac8",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "statement/remove",
+      "line": 85
+    },
+    {
+      "id": "68ed0657847e41d887ff1ed11f3cde13",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 103
+    },
+    {
+      "id": "ee7424a4c2a73d932ed517d59757ca76",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 111
+    },
+    {
+      "id": "43f1cb9f2a5148fff976c62d18af16db",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/error-guard",
+      "line": 115
+    },
+    {
+      "id": "adbc8dff1296fbe2ce1db1341535f398",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "branch/if",
+      "line": 116
+    },
+    {
+      "id": "daee549b0903997a9e336f5a951213ff",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "statement/return",
+      "line": 116
+    },
+    {
+      "id": "e0c848383e1398d7101c4dac848ad4b9",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 129
+    },
+    {
+      "id": "aab00184cffdad64a5f8bf9b3ae218ea",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "branch/if",
+      "line": 137
+    },
+    {
+      "id": "464c895dde4030dc67127f705d4f21be",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 137
+    },
+    {
+      "id": "b4d0ee36a16185b754b87aef6d39b097",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "numbers/incrementer",
+      "line": 150
+    },
+    {
+      "id": "b4cb49847819959d1b9749b753ce6782",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "numbers/incrementer",
+      "line": 186
+    },
+    {
+      "id": "9627dea3b97b56ecfada2513e640880e",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "branch/if",
+      "line": 210
+    },
+    {
+      "id": "4b4f71ed62165dcc7e5c0d88cd366f25",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "branch/if",
+      "line": 289
+    },
+    {
+      "id": "c8e1dd5cd13b80ec664ca79fded7785d",
+      "file": "internal/gcpperms/gensupport/main.go",
+      "mutator": "expression/errorf-wrap",
+      "line": 289
+    },
+    {
+      "id": "04c862e0f5f596620c6b72cac2409843",
+      "file": "internal/gcpperms/policy.go",
+      "mutator": "branch/if",
+      "line": 182
+    },
+    {
+      "id": "1d189cc1e900f5f71280a53b7fa0e140",
+      "file": "internal/gcpperms/policy.go",
+      "mutator": "expression/logical",
+      "line": 355
+    },
+    {
+      "id": "4e2e9b8c5db9a7ec5131bb4627ed1445",
+      "file": "internal/gcpperms/policy.go",
+      "mutator": "expression/remove",
+      "line": 355
+    },
+    {
+      "id": "5e1b84874790f0059a702614932e78f4",
+      "file": "internal/gcpperms/policy.go",
+      "mutator": "expression/remove",
+      "line": 355
+    },
+    {
+      "id": "cf37cd27755be8e13e97d5cb4a8a51d0",
+      "file": "internal/gcpperms/policy.go",
+      "mutator": "branch/if",
+      "line": 387
+    },
+    {
+      "id": "f9cf1e5b0d70a8c998c955fd49dd3cd7",
+      "file": "internal/gcpperms/proposal.go",
+      "mutator": "expression/error-guard",
+      "line": 59
+    },
+    {
+      "id": "7944de7a83e5a9d62bfe583205cc8d62",
+      "file": "internal/gcpperms/proposal.go",
+      "mutator": "branch/if",
+      "line": 60
     },
     {
       "id": "7af176c9cc254d98433891f8a639a3a8",
@@ -170,25 +524,25 @@
       "line": 526
     },
     {
-      "id": "daa9cde19f64bb5936e8f045035934ed",
-      "file": "internal/gcpperms/roles.go",
-      "mutator": "numbers/decrementer",
-      "line": 532
-    },
-    {
       "id": "8debb53da2ec69043ab30927ae958b46",
       "file": "internal/gcpperms/roles.go",
       "mutator": "numbers/decrementer",
       "line": 532
     },
     {
-      "id": "b37cff8f50f58963de89d6e705a01273",
+      "id": "daa9cde19f64bb5936e8f045035934ed",
+      "file": "internal/gcpperms/roles.go",
+      "mutator": "numbers/decrementer",
+      "line": 532
+    },
+    {
+      "id": "b178256e0a4ea06d38585b9c8c488046",
       "file": "internal/gcpperms/roles.go",
       "mutator": "numbers/incrementer",
       "line": 532
     },
     {
-      "id": "b178256e0a4ea06d38585b9c8c488046",
+      "id": "b37cff8f50f58963de89d6e705a01273",
       "file": "internal/gcpperms/roles.go",
       "mutator": "numbers/incrementer",
       "line": 532
@@ -210,6 +564,18 @@
       "file": "internal/gcpperms/roles.go",
       "mutator": "statement/remove",
       "line": 628
+    },
+    {
+      "id": "a095116ceea449fc58f57d29c847e2ec",
+      "file": "internal/gcpperms/usage.go",
+      "mutator": "conditional/bool-literal",
+      "line": 165
+    },
+    {
+      "id": "ea5cd8d7d139ae1cdad0a153647e3481",
+      "file": "internal/gcpperms/usage.go",
+      "mutator": "conditional/bool-literal",
+      "line": 185
     }
   ]
 }

@@ -44,6 +44,10 @@ const (
 	minDenyNames   = 5000
 )
 
+// entryPattern matches the lines of the generated files that hold an
+// entry, each a quoted permission indented by one tab.
+const entryPattern = `^\t"`
+
 var (
 	// rowRE matches one row of the support page's table: a permission and
 	// its level.
@@ -58,6 +62,13 @@ var (
 		`<code[^>]*>([a-z0-9.-]+\.googleapis\.com)/([A-Za-z0-9]+\.[A-Za-z0-9]+)</code>`,
 	)
 )
+
+// denyIndex is what parseDenyNames matches v2 names against.
+type denyIndex struct {
+	v1       map[string]string   // the support page's permissions
+	services map[string][]string // "resource.verb" -> the v1 services that have it
+	listed   map[string]bool     // the deny page's v2 names
+}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -163,10 +174,14 @@ func parseLevels(page []byte) (map[string]string, error) {
 // is cloudresourcemanager.googleapis.com/projects.delete.
 //
 // A v2 name whose service's first label, followed by its resource and verb,
-// is no v1 permission belongs to the one v1 permission with the same
-// resource and verb; when several have it, to the one whose service the
-// label contains. A v2 name that matches no single v1 permission is left
-// out: no deny rule can be matched to it.
+// is no v1 permission belongs to the v1 permission with the same resource
+// and verb whose service the label contains. When none does, it belongs to
+// the only v1 permission with that resource and verb, unless the page lists
+// that permission's own default v2 name: Secret Manager's
+// secretmanager.googleapis.com/backups.restore, which the support page does
+// not list yet, is not bigtable.backups.restore's. A v2 name that matches
+// no single v1 permission, or a v1 permission two v2 names match, is left
+// out: no deny rule can be matched to it with certainty.
 func parseDenyNames(page []byte, v1 map[string]string) (map[string]string, error) {
 	found := v2NameRE.FindAllSubmatch(page, -1)
 	if len(found) < minDenyNames {
@@ -174,29 +189,56 @@ func parseDenyNames(page []byte, v1 map[string]string) (map[string]string, error
 			"found %d permissions, expected at least %d", len(found), minDenyNames,
 		)
 	}
-	services := make(map[string][]string) // "resource.verb" -> v1 services
+	ix := denyIndex{
+		v1:       v1,
+		services: make(map[string][]string),
+		listed:   make(map[string]bool, len(found)),
+	}
 	for perm := range v1 {
 		service, rest, _ := strings.Cut(perm, ".")
-		services[rest] = append(services[rest], service)
+		ix.services[rest] = append(ix.services[rest], service)
+	}
+	for _, m := range found {
+		ix.listed[string(m[1])+"/"+string(m[2])] = true
 	}
 	names := make(map[string]string)
+	ambiguous := make(map[string]bool)
 	for _, m := range found {
-		fqdn, rest := string(m[1]), string(m[2])
-		label, _, _ := strings.Cut(fqdn, ".")
-		if _, ok := v1[label+"."+rest]; ok {
+		name := string(m[1]) + "/" + string(m[2])
+		perm, ok := ix.owner(string(m[1]), string(m[2]))
+		if !ok {
 			continue
 		}
-		candidates := services[rest]
-		if len(candidates) > 1 {
-			candidates = slices.DeleteFunc(slices.Clone(candidates), func(s string) bool {
-				return !strings.Contains(label, s)
-			})
+		if prev, dup := names[perm]; dup && prev != name {
+			ambiguous[perm] = true
 		}
-		if len(candidates) == 1 {
-			names[candidates[0]+"."+rest] = fqdn + "/" + rest
-		}
+		names[perm] = name
 	}
+	maps.DeleteFunc(names, func(perm, _ string) bool { return ambiguous[perm] })
 	return names, nil
+}
+
+// owner returns the v1 permission the v2 name fqdn/rest is an exception
+// for, or false when it is the default name of its own v1 permission or
+// matches no single v1 permission.
+func (ix *denyIndex) owner(fqdn, rest string) (string, bool) {
+	label, _, _ := strings.Cut(fqdn, ".")
+	if _, ok := ix.v1[label+"."+rest]; ok {
+		return "", false
+	}
+	candidates := ix.services[rest]
+	contained := slices.DeleteFunc(slices.Clone(candidates), func(s string) bool {
+		return !strings.Contains(label, s)
+	})
+	switch {
+	case len(contained) == 1:
+		return contained[0] + "." + rest, true
+	// contained is within candidates, so here the label contains no
+	// candidate's service.
+	case len(candidates) == 1 && !ix.listed[candidates[0]+".googleapis.com/"+rest]:
+		return candidates[0] + "." + rest, true
+	}
+	return "", false
 }
 
 // renderLevels returns support_levels.go: the levels that are not
@@ -230,10 +272,13 @@ func renderDenyNames(names map[string]string) ([]byte, error) {
 	return formatted(b.Bytes())
 }
 
-// writeHeader writes the generated-code line naming url, and the package
-// clause.
+// writeHeader writes the generated-code line naming url, the annotation
+// that keeps mutago from mutating the entries, and the package clause. The
+// entries are data copied from Google's page: no test could catch a mutant
+// that blanks one without restating the page.
 func writeHeader(b *bytes.Buffer, url string) {
 	fmt.Fprintf(b, "// Code generated by gensupport from %s; DO NOT EDIT.\n\n", url)
+	b.WriteString("// mutator-disable-regexp " + entryPattern + " *\n\n")
 	b.WriteString("package gcpperms\n\n")
 }
 

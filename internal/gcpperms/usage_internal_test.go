@@ -2,6 +2,7 @@ package gcpperms
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,8 +32,19 @@ func TestParseInsights(t *testing.T) {
 		Observed:  30 * 24 * time.Hour,
 	})
 
+	// spec: an insight with no observation period observed none.
+	noPeriod, err := ParseInsights(
+		[]byte(`[{"content": {"member": "user:a@b.c", "role": "roles/viewer"}}]`),
+	)
+	ok(t, err)
+	equals(t, noPeriod, []Insight{{Member: "user:a@b.c", Role: "roles/viewer"}})
+
 	for name, tc := range map[string]struct{ data, want string }{
 		"not an IAM insight": {data: `[{"content": {"recommendation": "x"}}]`, want: "names no member and role"},
+		"no role":            {data: `[{"content": {"member": "user:a@b.c"}}]`, want: "names no member and role"},
+		"no member":          {data: `[{"content": {"role": "roles/viewer"}}]`, want: "names no member and role"},
+		"not YAML":           {data: "[", want: "gcpperms.ParseInsights: "},
+		"not an object":      {data: "[3]", want: "reading an insight"},
 		"bad period": {
 			data: `[{"observationPeriod": "a while", "content": {"member": "user:a@b.c", "role": "roles/viewer"}}]`,
 			want: "observation period",
@@ -113,5 +125,100 @@ func TestCompareUsage(t *testing.T) {
 	ok(t, WriteUsage(&buf, &none))
 	if !strings.Contains(buf.String(), "no insights about this member") {
 		t.Fatalf("report lacks the no-insights line:\n%s", buf.String())
+	}
+}
+
+func TestCompareUsageAcrossBinaries(t *testing.T) {
+	roles := []Role{{
+		Name:        "roles/datastore.user",
+		Permissions: []string{"datastore.entities.get", "datastore.entities.update"},
+	}}
+	bins := []Binary{
+		{Package: "example.com/one", Calls: []Call{{
+			API:         "x",
+			Permissions: []string{"datastore.entities.get"},
+			Conditional: []string{"datastore.entities.update"},
+		}}},
+		{Package: "example.com/two", Calls: []Call{{
+			API:         "y",
+			Permissions: []string{"datastore.entities.update"},
+			Conditional: []string{"pubsub.topics.get", "storage.objects.get"},
+		}}},
+	}
+	// spec: an insight about another member, or about a role with no
+	// definition, does not stop the insights after it being read.
+	insights := []Insight{
+		{Member: "user:bob@example.com", Role: "roles/datastore.user", Observed: 48 * time.Hour},
+		{
+			Member:    appSA,
+			Role:      "projects/demo/roles/Custom",
+			Exercised: []string{"pubsub.topics.get"},
+		},
+		{
+			Member:    appSA,
+			Role:      "roles/datastore.user",
+			Exercised: []string{"datastore.entities.get", "datastore.entities.update"},
+			Observed:  24 * time.Hour,
+		},
+	}
+	got := CompareUsage(bins, appSA, insights, roles)
+	// spec: a permission one binary needs on some paths and another always
+	// needs is not conditional; one only needed on some paths and used is
+	// not unexpected.
+	equals(t, got, Usage{
+		Member:       appSA,
+		Packages:     []string{"example.com/one", "example.com/two"},
+		Insights:     2,
+		ObservedDays: 1,
+		Used: []string{
+			"datastore.entities.get",
+			"datastore.entities.update",
+			"pubsub.topics.get",
+		},
+		Unobserved:   []string{"storage.objects.get"},
+		Conditional:  []string{"pubsub.topics.get", "storage.objects.get"},
+		UnknownRoles: []string{"projects/demo/roles/Custom"},
+	})
+
+	var buf bytes.Buffer
+	ok(t, WriteUsage(&buf, &got))
+	// spec: lists with nothing in them are left out, and the lists after
+	// them are not.
+	equals(
+		t,
+		buf.String(),
+		`== serviceAccount:app@demo.iam.gserviceaccount.com (example.com/one, example.com/two)
+  2 insights, observing up to 1 days
+  Found by analyze, with no usage data (no insight covers a role holding them):
+    storage.objects.get (conditional)
+  Roles with insights but no definition: projects/demo/roles/Custom
+  3 of 4 permissions found by analyze were used
+`,
+	)
+
+	// spec: a report with no unknown roles leaves out that line.
+	got.UnknownRoles = nil
+	buf.Reset()
+	ok(t, WriteUsage(&buf, &got))
+	if strings.Contains(buf.String(), "no definition") {
+		t.Fatalf("report names unknown roles:\n%s", buf.String())
+	}
+}
+
+func TestWriteUsageReportsWriteErrors(t *testing.T) {
+	for name, u := range map[string]Usage{
+		"with insights": {Member: appSA, Insights: 1, Used: []string{"a.b.get"}},
+		"no insights":   {Member: appSA},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var full bytes.Buffer
+			ok(t, WriteUsage(&full, &u))
+			// spec: a write failure at any point is returned, not swallowed.
+			for limit := range full.Len() {
+				if err := WriteUsage(&failingWriter{limit: limit}, &u); !errors.Is(err, errWrite) {
+					t.Fatalf("with a writer failing after %d bytes, got %v", limit, err)
+				}
+			}
+		})
 	}
 }

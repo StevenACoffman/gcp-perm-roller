@@ -377,10 +377,10 @@ func jsonValues(data []byte) ([]json.RawMessage, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "reading YAML")
 		}
-		js = bytes.TrimSpace(js)
+		// YAMLToJSON writes compact JSON, and "null" for a document that is
+		// empty or only comments, which holds no value.
 		switch {
-		case len(js) == 0 || string(js) == "null":
-			continue
+		case string(js) == "null":
 		case js[0] == '[':
 			var list []json.RawMessage
 			if err := json.Unmarshal(js, &list); err != nil {

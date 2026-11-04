@@ -254,3 +254,87 @@ func TestWritePredefinedRolesSections(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteMemberAccessNotesAndDenials(t *testing.T) {
+	bindings := []HeldBinding{
+		{
+			Role:    "roles/datastore.user",
+			State:   Unconditional,
+			Through: []string{"group:eng@example.com", "group:ops@example.com"},
+		},
+		{Role: "roles/pubsub.viewer", State: Unconditional, Resource: "organizations/1"},
+		{
+			Role:      "roles/storage.objectViewer",
+			Condition: &Condition{Expression: `resource.name.startsWith("logs")`},
+			State:     Conditional,
+			Resource:  "folders/2",
+			Through:   []string{"group:eng@example.com"},
+		},
+	}
+	denials := []Denial{
+		{Permission: "datastore.entities.delete", Policy: "No deletes", Certain: true},
+		{Permission: "datastore.entities.get", Policy: "prod", Reason: "only when Prod holds"},
+		{Permission: "pubsub.topics.get", Policy: "No reads", Certain: true},
+		{Permission: "storage.objects.get", Policy: "groups"},
+	}
+	const holds = `== user:ada@example.com
+  Holds:
+    roles/datastore.user                          through group:eng@example.com, group:ops@example.com
+    roles/pubsub.viewer                           inherited from organizations/1
+    roles/storage.objectViewer                    conditional: resource.name.startsWith("logs"); through group:eng@example.com; inherited from folders/2
+  1 permissions
+`
+	tests := map[string]struct {
+		denyPolicies int
+		// denials, when set, are the denials instead of all of them.
+		denials []Denial
+		want    string
+	}{
+		// spec: each binding notes its condition, the groups it is held
+		// through, and where it is inherited from; denials are listed in
+		// order under whether they are certain, each with its policy and
+		// any reason.
+		"deny policies": {
+			denyPolicies: 3,
+			want: holds + `  3 deny policies
+  Denied, so not counted:
+    datastore.entities.delete                     by No deletes
+    pubsub.topics.get                             by No reads
+  Possibly denied, still counted:
+    datastore.entities.get                        by prod, only when Prod holds
+    storage.objects.get                           by groups
+  no permissions required
+`,
+		},
+		// spec: a list with no denials is left out, and one with a single
+		// denial is written.
+		"only certain denials": {
+			denyPolicies: 1,
+			denials:      denials[:1],
+			want: holds + `  1 deny policies
+  Denied, so not counted:
+    datastore.entities.delete                     by No deletes
+  no permissions required
+`,
+		},
+		// spec: with no deny policies, nothing is said about them.
+		"no deny policies": {want: holds + "  no permissions required\n"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ds := denials
+			if tc.denials != nil {
+				ds = tc.denials
+			}
+			var buf bytes.Buffer
+			ok(t, WriteMemberAccess(&buf, &MemberAccess{
+				Member:       "user:ada@example.com",
+				Bindings:     bindings,
+				Permissions:  []string{"datastore.entities.get"},
+				DenyPolicies: tc.denyPolicies,
+				Denials:      ds,
+			}))
+			equals(t, buf.String(), tc.want)
+		})
+	}
+}

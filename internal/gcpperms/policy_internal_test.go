@@ -335,3 +335,106 @@ func TestNewMemberAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestParsePolicyShapes(t *testing.T) {
+	rule := DenyRule{
+		DeniedPrincipals:  []string{"principalSet://goog/public:all"},
+		DeniedPermissions: []string{"iam.googleapis.com/roles.delete"},
+	}
+	tests := map[string]struct {
+		data string
+		want Policy
+	}{
+		// spec: an empty file is a policy with nothing in it.
+		"empty": {data: ""},
+		// spec: a deny policy is known by its kind, or by its rules when
+		// --format drops the kind.
+		"a deny policy with no rules": {
+			data: "type: project\nid: p\npolicy: {}\n---\n" +
+				"type: project\nid: p\npolicy: {kind: DenyPolicy, name: policies/x/denypolicies/d}\n",
+			want: Policy{DenyPolicies: 1},
+		},
+		"a deny policy with no kind": {
+			data: "type: project\nid: p\npolicy:\n  displayName: D\n  rules:\n" +
+				"  - denyRule:\n      deniedPrincipals: [principalSet://goog/public:all]\n" +
+				"      deniedPermissions: [iam.googleapis.com/roles.delete]\n",
+			want: Policy{DenyPolicies: 1, DenyRules: []DenyRule{{
+				Policy:            "D",
+				DeniedPrincipals:  rule.DeniedPrincipals,
+				DeniedPermissions: rule.DeniedPermissions,
+			}}},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := ParsePolicy([]byte(tc.data))
+			ok(t, err)
+			// raw, kept for Propose, is checked by its tests.
+			got.raw = nil
+			equals(t, got, tc.want)
+		})
+	}
+}
+
+func TestParsePolicyAnalysisMerges(t *testing.T) {
+	result := func(resource, role, condition string) string {
+		binding := `{"role": "` + role + `", "members": ["group:eng@example.com"]` + condition + `}`
+		return `{"policy": {"attachedResource": "//cloudresourcemanager.googleapis.com/` +
+			resource + `", "binding": ` + binding + `}, "ACLs": [{"identities": [{"name": "user:ada@example.com"}]}]}`
+	}
+	logs := `, "condition": {"title": "Logs", "expression": "true"}`
+	p, err := ParsePolicy([]byte("[" + strings.Join([]string{
+		result("projects/1", "roles/viewer", ""),
+		result("folders/2", "roles/viewer", ""),
+		result("projects/1", "roles/editor", ""),
+		result("projects/1", "roles/viewer", logs),
+		result("projects/1", "roles/viewer", ""),
+	}, ",") + "]"))
+	ok(t, err)
+	// spec: results are one binding only when their resource, role, and
+	// condition are all the same.
+	var got []string
+	for _, b := range p.Bindings {
+		var condition string
+		if b.Condition != nil {
+			condition = b.Condition.Name()
+		}
+		got = append(got, b.Resource+" "+b.Role+" "+condition)
+	}
+	equals(t, got, []string{
+		" roles/viewer ",
+		"folders/2 roles/viewer ",
+		" roles/editor ",
+		" roles/viewer Logs",
+	})
+
+	// spec: an analysis with one result is still an analysis.
+	one, err := ParsePolicy([]byte("[" + result("projects/1", "roles/viewer", "") + "]"))
+	ok(t, err)
+	equals(t, one.Bindings[0].Identities, []string{"user:ada@example.com"})
+}
+
+func TestMemberBindingsThroughGroupsOnly(t *testing.T) {
+	p := Policy{Bindings: []Binding{
+		{
+			Role: "roles/viewer",
+			Members: []string{
+				"group:eng@example.com",
+				"user:bob@example.com",
+				"group:ops@example.com",
+			},
+			Identities: []string{
+				"group:eng@example.com",
+				"user:bob@example.com",
+				"user:ada@example.com",
+			},
+		},
+	}}
+	// spec: a binding is held through the groups the analysis expanded;
+	// another user, even one listed, is no group to hold it through.
+	equals(t, p.MemberBindings("user:ada@example.com", policyNow), []HeldBinding{{
+		Role:    "roles/viewer",
+		State:   Unconditional,
+		Through: []string{"group:eng@example.com"},
+	}})
+}
