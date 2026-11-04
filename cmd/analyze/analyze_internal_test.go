@@ -265,10 +265,14 @@ func TestAnalyzeFromErrors(t *testing.T) {
 			args: []string{"--from=testdata/one.json", "./..."}, usage: true,
 			want: "--from reads saved results, so it takes no packages",
 		},
-		"a missing file": {args: []string{"--from=testdata/nope.json"}, want: "nope.json"},
+		// spec: an error loading the results says it is analyze's.
+		"a missing file": {
+			args: []string{"--from=testdata/nope.json"},
+			want: "analyze: gcpperms.LoadResults: open testdata/nope.json",
+		},
 		"a file not JSON": {
 			args: []string{"--from=testdata/bad.json"},
-			want: "parsing testdata/bad.json",
+			want: "analyze: gcpperms.LoadResults: parsing testdata/bad.json",
 		},
 		"unreadable roles": {
 			args: []string{"--from=testdata/one.json", "--roles=testdata/nope"},
