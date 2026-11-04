@@ -1,0 +1,56 @@
+name: Mutation baseline
+# Run by hand to find the mutants that survive in one file or package, and download them
+# as a baseline to merge into internal/gcpperms/mutago-baseline.json. Mutating a single
+# file such as internal/gcpperms/wrappers.go takes too much memory and time to do
+# comfortably on a laptop.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: File or package to mutate, as mutago takes it
+        required: true
+        default: internal/gcpperms/wrappers.go
+env:
+  GOTOOLCHAIN: local
+jobs:
+  baseline:
+    name: Write the surviving mutants as a baseline
+    runs-on: ubuntu-latest
+    # A single file of internal/gcpperms takes well under this; the whole package does not
+    # fit, which is why this takes a target.
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: "false"
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: "1.27.3"
+    - name: Mutate the target and write its survivors
+      # The flags match `just mutate`: the pinned mutago, .mutago.yml, no -short, and a
+      # high --timeout-coefficient so slow mutants are not counted as killed.
+      #
+      # --update-baseline writes the escaped mutants to the file it is given, so it is
+      # given a copy: the artifact holds what this run found, to merge by hand.
+      #
+      # The target is passed through the environment, not interpolated into the script.
+      env:
+        RAPID_NOFAILFILE: "true"
+        TARGET: ${{ inputs.target }}
+      run: |
+        mkdir -p out
+        cp internal/gcpperms/mutago-baseline.json out/mutago-baseline.json
+        go run github.com/quality-gates/mutago/v2/cmd/mutago@v2.10.24 \
+          --config=.mutago.yml \
+          --baseline=out/mutago-baseline.json \
+          --update-baseline \
+          --timeout-coefficient=15 \
+          --quiet --no-diffs \
+          "$TARGET" | tee out/mutago.log
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      if: always()
+      with:
+        name: mutago-baseline
+        path: out/
