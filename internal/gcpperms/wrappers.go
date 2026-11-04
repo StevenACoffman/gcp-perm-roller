@@ -83,7 +83,7 @@ func FindWrappers(ctx context.Context, cfg *Config) ([]Wrapper, error) {
 	}
 	var healthy []*packages.Package
 	for _, p := range pkgs {
-		if len(p.Errors) == 0 && p.Types != nil {
+		if len(p.Errors) == 0 {
 			healthy = append(healthy, p)
 		}
 	}
@@ -201,10 +201,11 @@ func summarize(funcs []*ssa.Function) map[*ssa.Function]*reflectSummary {
 }
 
 // summarizeOnce adds to fn's summary what its calls, and its closures',
-// show, and reports whether the summary grew.
+// show, and reports whether the reflect.Values it calls grew: only those
+// change what calls to fn call.
 func summarizeOnce(fn *ssa.Function, sums map[*ssa.Function]*reflectSummary) bool {
 	sum := sums[fn]
-	grew := false
+	before := len(sum.values)
 	for _, f := range withClosures(fn) {
 		for _, b := range f.Blocks {
 			for _, instr := range b.Instrs {
@@ -216,12 +217,12 @@ func summarizeOnce(fn *ssa.Function, sums map[*ssa.Function]*reflectSummary) boo
 					called = boundCall(x)
 				}
 				for _, c := range called {
-					grew = sum.add(fn, c.value, c.how) || grew
+					sum.add(fn, c.value, c.how)
 				}
 			}
 		}
 	}
-	return grew
+	return len(sum.values) > before
 }
 
 // calledValues returns the reflect.Values that call calls: the receiver of
@@ -231,7 +232,8 @@ func calledValues(call ssa.CallInstruction, sums map[*ssa.Function]*reflectSumma
 	common := call.Common()
 	callee := common.StaticCallee()
 	for _, name := range []string{"Value.Call", "Value.CallSlice"} {
-		if isReflect(callee, name) && len(common.Args) > 0 {
+		// The receiver is the first argument.
+		if isReflect(callee, name) {
 			how := "with reflect." + name
 			if makeFuncIn(call.Parent()) {
 				how += ", in a function built with reflect.MakeFunc"
@@ -250,23 +252,20 @@ func calledValues(call ssa.CallInstruction, sums map[*ssa.Function]*reflectSumma
 	if sum == nil {
 		return nil
 	}
+	// The callee's parameters, and so the indexes of sum.values, are its
+	// arguments, receiver first.
 	var out []calledValue
 	for _, j := range slices.Sorted(maps.Keys(sum.values)) {
-		if j < len(common.Args) {
-			out = append(out, calledValue{common.Args[j], "through " + origin.Name()})
-		}
+		out = append(out, calledValue{common.Args[j], "through " + origin.Name()})
 	}
 	return out
 }
 
 // boundCall returns the reflect.Value whose Call or CallSlice method mc
 // binds as a method value, as in next := v.Call, which calls v when next is
-// called.
+// called. mc.Fn is then that method's wrapper, which binds only v.
 func boundCall(mc *ssa.MakeClosure) []calledValue {
-	fn, ok := mc.Fn.(*ssa.Function)
-	if !ok || len(mc.Bindings) != 1 {
-		return nil
-	}
+	fn, _ := mc.Fn.(*ssa.Function)
 	for _, name := range []string{"Value.Call", "Value.CallSlice"} {
 		if isReflect(fn, name) {
 			return []calledValue{{mc.Bindings[0], "with reflect." + name + " as a method value"}}
@@ -307,37 +306,33 @@ func passedToMakeFunc(fn *ssa.Function) bool {
 }
 
 // add records that fn calls the reflect.Value v, made from one of fn's
-// parameters or being one, and reports whether that is new.
-func (s *reflectSummary) add(fn *ssa.Function, v ssa.Value, how string) bool {
-	grew := false
+// parameters or being one.
+func (s *reflectSummary) add(fn *ssa.Function, v ssa.Value, how string) {
 	for _, src := range sources(v) {
 		if i := paramOf(fn, src); i >= 0 {
-			grew = record(s.values, i, how) || grew
+			record(s.values, i, how)
 			continue
 		}
 		for _, arg := range valueOfArgs(src) {
 			if i := paramOf(fn, arg); i >= 0 {
-				grew = record(s.funcs, i, how) || grew
+				record(s.funcs, i, how)
 			}
 		}
 	}
-	return grew
 }
 
-// record sets m[i] to how unless m has i, and reports whether it did.
-func record(m map[int]string, i int, how string) bool {
-	if _, ok := m[i]; ok {
-		return false
+// record sets m[i] to how unless m has i: the first way found is kept.
+func record(m map[int]string, i int, how string) {
+	if _, ok := m[i]; !ok {
+		m[i] = how
 	}
-	m[i] = how
-	return true
 }
 
 // valueOfArgs returns what v may have been made from when v is a call of
-// reflect.ValueOf, and nothing otherwise.
+// reflect.ValueOf, which takes one argument, and nothing otherwise.
 func valueOfArgs(v ssa.Value) []ssa.Value {
 	call, ok := v.(*ssa.Call)
-	if !ok || !isReflect(call.Common().StaticCallee(), "ValueOf") || len(call.Call.Args) != 1 {
+	if !ok || !isReflect(call.Common().StaticCallee(), "ValueOf") {
 		return nil
 	}
 	return sources(call.Call.Args[0])
@@ -345,10 +340,8 @@ func valueOfArgs(v ssa.Value) []ssa.Value {
 
 // paramOf is the index of the parameter of fn that v is, or -1.
 func paramOf(fn *ssa.Function, v ssa.Value) int {
-	if p, ok := v.(*ssa.Parameter); ok && p.Parent() == fn {
-		return slices.Index(fn.Params, p)
-	}
-	return -1
+	p, _ := v.(*ssa.Parameter)
+	return slices.Index(fn.Params, p)
 }
 
 // sources returns the values v may come from, seen through conversions, the
@@ -360,7 +353,7 @@ func sources(v ssa.Value) []ssa.Value {
 	for len(stack) > 0 {
 		v := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		if v == nil || seen[v] {
+		if seen[v] {
 			continue
 		}
 		seen[v] = true
@@ -394,16 +387,12 @@ func comesFrom(v ssa.Value) ([]ssa.Value, bool) {
 }
 
 // closureBindings returns the values bound to the free variable fv where
-// its closure is created.
+// its closure, a function literal, is created.
 func closureBindings(fv *ssa.FreeVar) []ssa.Value {
 	closure := fv.Parent()
-	parent := closure.Parent()
 	i := slices.Index(closure.FreeVars, fv)
-	if parent == nil || i < 0 {
-		return nil
-	}
 	var out []ssa.Value
-	for _, b := range parent.Blocks {
+	for _, b := range closure.Parent().Blocks {
 		for _, instr := range b.Instrs {
 			if mc, ok := instr.(*ssa.MakeClosure); ok && mc.Fn == closure {
 				out = append(out, mc.Bindings[i])
@@ -459,17 +448,14 @@ func isReflect(fn *ssa.Function, name string) bool {
 	return got == name
 }
 
-// receiverNamed returns the named type of obj's receiver, if it has one.
+// receiverNamed returns the named type of obj's receiver, if it is a
+// method with a value receiver, as reflect.Value's are.
 func receiverNamed(obj *types.Func) (*types.Named, bool) {
 	recv := obj.Signature().Recv()
 	if recv == nil {
 		return nil, false
 	}
-	t := recv.Type()
-	if ptr, ok := t.(*types.Pointer); ok {
-		t = ptr.Elem()
-	}
-	named, ok := t.(*types.Named)
+	named, ok := recv.Type().(*types.Named)
 	return named, ok
 }
 
